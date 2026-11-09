@@ -82,7 +82,9 @@ export function mlp(partial: Partial<MLPConfig> & Pick<MLPConfig, 'hidden'>): ML
     kind: 'mlp',
     inDim: 1,
     activations: hidden.map(() => 'relu'),
-    init: { kind: 'auto' },
+    // PyTorch nn.Linear default: weights and biases U(-1/sqrt(fan_in), +). Measured to fit
+    // 1-D targets far better than zero biases, which put every first-layer ReLU kink at x = 0.
+    init: { kind: 'torch_default' },
     optimizer: { kind: 'adam', lr: 1e-3 },
     schedule: { kind: 'constant' },
     loss: { kind: 'mse' },

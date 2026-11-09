@@ -15,3 +15,5 @@ export { regionMetrics, type RegionMetrics } from './metrics.ts';
 export { MLP, type LayerView } from './mlp.ts';
 export { lrAt, Optimizer } from './optim.ts';
 export { createRun, MLPRun, type Frame, type Model } from './run.ts';
+export type { FrameMsg, FromWorker, ToWorker } from './worker/protocol.ts';
+export { MAX_IN_FLIGHT } from './worker/protocol.ts';

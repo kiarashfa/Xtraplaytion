@@ -38,6 +38,7 @@ export default defineConfig({
         tailwindcss: 'Tailwind CSS (base styles)',
         '@fontsource-variable/inter': 'Inter font (packaged by Fontsource)',
         '@fontsource/jetbrains-mono': 'JetBrains Mono font (packaged by Fontsource)',
+        katex: 'KaTeX (formula rendering, with its fonts)',
       },
       // Algorithms ported into packages/dmath.
       extras: [

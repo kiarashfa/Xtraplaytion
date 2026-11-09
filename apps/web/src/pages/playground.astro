@@ -1,0 +1,16 @@
+---
+import Playground from '../components/playground/Playground.svelte';
+import { useTranslations } from '../i18n';
+import Base from '../layouts/Base.astro';
+
+const t = useTranslations();
+---
+
+<Base title={t('pg.title')} description={t('pg.description')} wide>
+  <h1 class="sr-only">{t('pg.title')}</h1>
+  <Playground client:only="svelte">
+    <p slot="fallback" class="p-8 text-muted">
+      {t('pg.loading')}
+    </p>
+  </Playground>
+</Base>

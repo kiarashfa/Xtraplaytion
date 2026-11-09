@@ -1,0 +1,30 @@
+---
+import { useTranslations } from '../i18n';
+import { url } from '../lib/url.ts';
+import Base from './Base.astro';
+
+interface Props {
+  frontmatter: { title: string; description: string; n: number; minutes: number };
+}
+
+const t = useTranslations();
+const { frontmatter: fm } = Astro.props;
+---
+
+<Base title={fm.title} description={fm.description}>
+  <article class="lesson mx-auto max-w-[720px] py-8 sm:py-12">
+    <p class="flex flex-wrap items-center gap-2.5 text-[13px] font-medium text-muted">
+      <a
+        href={url('lessons/')}
+        class="inline-flex h-6 items-center rounded-full bg-accent-soft px-2.5 font-semibold text-accent"
+      >
+        {t('lessons.lesson', { n: fm.n })}
+      </a>
+      <span>{t('lessons.minutes', { n: fm.minutes })}</span>
+      <span aria-hidden="true">·</span>
+      <span>{t('lessons.interactive')}</span>
+    </p>
+    <h1>{fm.title}</h1>
+    <slot />
+  </article>
+</Base>

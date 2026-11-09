@@ -2,6 +2,7 @@
 import ExtrapolationFigure from '../components/ExtrapolationFigure.astro';
 import { useTranslations } from '../i18n';
 import Base from '../layouts/Base.astro';
+import { url } from '../lib/url.ts';
 
 const t = useTranslations();
 const features = [
@@ -24,6 +25,17 @@ const features = [
       {t('home.title')}
     </h1>
     <p class="mt-5 max-w-2xl text-lg text-muted">{t('home.lead')}</p>
+    <div class="mt-7 flex flex-wrap gap-3">
+      <a href={url('playground/')} class="xp-btn xp-btn-primary min-h-12 px-5 text-base">
+        {t('home.cta')}
+      </a>
+      <a
+        href={url('lessons/activations-and-extrapolation/')}
+        class="xp-btn min-h-12 px-5 text-base"
+      >
+        {t('home.ctaLesson')}
+      </a>
+    </div>
   </section>
 
   <ExtrapolationFigure />

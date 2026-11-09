@@ -3,7 +3,11 @@
 import { createHost } from './host.ts';
 import type { ToWorker } from './protocol.ts';
 
-declare const self: DedicatedWorkerGlobalScope;
+// Only the parts of the worker global scope used here (keeps the DOM/WebWorker libs optional).
+declare const self: {
+  postMessage(message: unknown, transfer: Transferable[]): void;
+  onmessage: ((e: MessageEvent<ToWorker>) => void) | null;
+};
 
 const channel = new MessageChannel();
 let pending: (() => void) | null = null;

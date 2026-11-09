@@ -1,0 +1,43 @@
+---
+layout: ../../layouts/Lesson.astro
+title: Activations and extrapolation
+description: A network only learns where you show it data. See what three activation functions do in a gap with no data at all.
+n: 1
+minutes: 6
+---
+
+import ActivationRace from '../../components/lesson/ActivationRace.svelte';
+import { url as siteUrl } from '../../lib/url.ts';
+
+A network only learns where you show it data. What it does everywhere else depends on one small choice: its activation function.
+
+## The setup
+
+Take the wave `sin(3x)` between −3 and 3 and hide its middle. The networks get training points only where x is below −1 or above 1, the shaded parts of the plots. Each network has two hidden layers of ten neurons, and they all train with the same data, the same starting seed and the same optimizer. The only difference is the activation function inside the neurons.
+
+## Predict first
+
+<ActivationRace
+  client:only="svelte"
+  question="Three small networks see this wave only on its two outer parts. Which one fills the empty middle best?"
+/>
+
+## Why ReLU goes straight
+
+A ReLU neuron outputs zero for negative inputs and passes positive inputs through unchanged. A network of them adds up straight pieces with a few bends. Where there is no data, nothing asks for another bend, so the curve carries on in a straight line. The same thing happens beyond the data on both sides: ReLU networks extrapolate with straight lines.
+
+## Why tanh bends gently
+
+tanh is smooth and flattens out near −1 and 1. A tanh network builds the gap from soft S-shaped pieces, so it bridges the middle with a smooth curve. Here that bridge can look a lot like the missing wave, but it is a lucky guess: nothing in the network knows that the wave keeps going.
+
+## Why sin makes waves
+
+With sin as the activation, every neuron is a wave, so the network can only produce sums of waves. In the gap it draws one of its own, often close to the truth and sometimes with too much swing.
+
+> A model repeats the shapes it is built from. Outside the data, those shapes are all it has.
+
+## Try it yourself
+
+<a href={siteUrl('playground/#preset=sine-gap')}>Open this experiment in the playground</a>, then
+change the activation, give the network more neurons, or drag the training ranges. Next, try a
+target that is not a wave, like `x^2`, and see which activation wins now.

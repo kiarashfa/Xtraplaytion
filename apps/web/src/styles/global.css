@@ -5,55 +5,101 @@
 /* Theme is set on <html data-theme> by the inline head script. */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
-/* Semantic tokens. Placeholder palette until the design mocks are approved. */
+/* Design tokens (approved mocks). Competitor colors are Okabe-Ito based and each one
+   is paired with a dash pattern in the plots, so color is never the only cue. */
 :root {
   color-scheme: light;
-  --xp-bg: #f5f7fb;
+  --xp-bg: #f3f5f9;
   --xp-surface: #ffffff;
-  --xp-ink: #111827;
-  --xp-muted: #4b5563;
-  --xp-line: #d6dde8;
+  --xp-surface-2: #f7f9fc;
+  --xp-ink: #0f172a;
+  --xp-muted: #526073;
+  --xp-faint: #6b7686;
+  --xp-line: #e3e8ef;
+  --xp-line-strong: #cfd7e3;
   --xp-accent: #1d5fd6;
   --xp-accent-ink: #ffffff;
-  --xp-target: #d9480f;
-  --xp-model: #1d5fd6;
-  --xp-band: #f4ead9;
-  --xp-band-edge: #8a6d3b;
+  --xp-accent-soft: #e9f0fd;
+  --xp-good: #0f7a55;
+  --xp-bad: #b4233d;
   --xp-focus: #1d5fd6;
+  --xp-plot-bg: #ffffff;
+  --xp-grid: #eef2f7;
+  --xp-grid-strong: #d8dee8;
+  --xp-band: rgb(233 213 176 / 0.42);
+  --xp-band-edge: #a27c3f;
+  --xp-band-ink: #7d5f2e;
+  --xp-interp-bg: rgb(99 102 241 / 0.05);
+  --xp-interp-ink: #5b5fc7;
+  --xp-extrap-bg: rgb(225 29 72 / 0.035);
+  --xp-extrap-ink: #b4405c;
+  --xp-target: #d55e00;
+  --xp-truth: #64748b;
+  --xp-c1: #0072b2;
+  --xp-c2: #009e73;
+  --xp-c3: #cc79a7;
+  --xp-c4: #e69f00;
+  --xp-c5: #56b4e9;
+  --xp-c6: #475569;
+  --xp-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 4px 16px rgb(15 23 42 / 0.05);
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --xp-bg: #0b1020;
-  --xp-surface: #121a2e;
+  --xp-bg: #090e1a;
+  --xp-surface: #101827;
+  --xp-surface-2: #0c1322;
   --xp-ink: #e6eaf2;
-  --xp-muted: #a3adbf;
-  --xp-line: #2a3550;
-  --xp-accent: #82acff;
-  --xp-accent-ink: #0b1020;
-  --xp-target: #ff8a65;
-  --xp-model: #82acff;
-  --xp-band: #2b2516;
+  --xp-muted: #a3adbe;
+  --xp-faint: #8792a6;
+  --xp-line: #1c2638;
+  --xp-line-strong: #2a3850;
+  --xp-accent: #7aa7ff;
+  --xp-accent-ink: #081022;
+  --xp-accent-soft: #15223d;
+  --xp-good: #3ccf95;
+  --xp-bad: #f18aa3;
+  --xp-focus: #7aa7ff;
+  --xp-plot-bg: #0c1424;
+  --xp-grid: #162136;
+  --xp-grid-strong: #23314b;
+  --xp-band: rgb(201 169 106 / 0.13);
   --xp-band-edge: #c9a96a;
-  --xp-focus: #82acff;
+  --xp-band-ink: #d5b679;
+  --xp-interp-bg: rgb(129 140 248 / 0.07);
+  --xp-interp-ink: #a5a8ff;
+  --xp-extrap-bg: rgb(244 63 94 / 0.06);
+  --xp-extrap-ink: #f18aa3;
+  --xp-target: #ff8a4c;
+  --xp-truth: #8b97ab;
+  --xp-c1: #5ab0f0;
+  --xp-c2: #2ccb9c;
+  --xp-c3: #e7a2cb;
+  --xp-c4: #f5b83d;
+  --xp-c5: #9ad7ff;
+  --xp-c6: #a7b1c2;
+  --xp-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.25);
 }
 
 /* No-JS fallback: follow the system setting. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
-    --xp-bg: #0b1020;
-    --xp-surface: #121a2e;
+    --xp-bg: #090e1a;
+    --xp-surface: #101827;
+    --xp-surface-2: #0c1322;
     --xp-ink: #e6eaf2;
-    --xp-muted: #a3adbf;
-    --xp-line: #2a3550;
-    --xp-accent: #82acff;
-    --xp-accent-ink: #0b1020;
-    --xp-target: #ff8a65;
-    --xp-model: #82acff;
-    --xp-band: #2b2516;
+    --xp-muted: #a3adbe;
+    --xp-faint: #8792a6;
+    --xp-line: #1c2638;
+    --xp-line-strong: #2a3850;
+    --xp-accent: #7aa7ff;
+    --xp-accent-ink: #081022;
+    --xp-accent-soft: #15223d;
+    --xp-target: #ff8a4c;
+    --xp-band: rgb(201 169 106 / 0.13);
     --xp-band-edge: #c9a96a;
-    --xp-focus: #82acff;
+    --xp-c1: #5ab0f0;
   }
 }
 
@@ -62,15 +108,28 @@
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --color-bg: var(--xp-bg);
   --color-surface: var(--xp-surface);
+  --color-surface-2: var(--xp-surface-2);
   --color-ink: var(--xp-ink);
   --color-muted: var(--xp-muted);
+  --color-faint: var(--xp-faint);
   --color-line: var(--xp-line);
+  --color-line-strong: var(--xp-line-strong);
   --color-accent: var(--xp-accent);
   --color-accent-ink: var(--xp-accent-ink);
+  --color-accent-soft: var(--xp-accent-soft);
+  --color-good: var(--xp-good);
+  --color-bad: var(--xp-bad);
   --color-target: var(--xp-target);
-  --color-model: var(--xp-model);
+  --color-model: var(--xp-c1);
   --color-band: var(--xp-band);
   --color-band-edge: var(--xp-band-edge);
+  --color-c1: var(--xp-c1);
+  --color-c2: var(--xp-c2);
+  --color-c3: var(--xp-c3);
+  --color-c4: var(--xp-c4);
+  --color-c5: var(--xp-c5);
+  --color-c6: var(--xp-c6);
+  --shadow-card: var(--xp-shadow);
 }
 
 @layer base {
@@ -95,5 +154,106 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+@layer components {
+  .xp-card {
+    background: var(--xp-surface);
+    border: 1px solid var(--xp-line);
+    border-radius: 14px;
+    box-shadow: var(--xp-shadow);
+  }
+  .xp-input {
+    min-height: 36px;
+    width: 100%;
+    border: 1px solid var(--xp-line-strong);
+    border-radius: 8px;
+    background: var(--xp-surface-2);
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--xp-ink);
+  }
+  .xp-input:focus {
+    outline: 2px solid var(--xp-focus);
+    outline-offset: 0;
+    background: var(--xp-surface);
+  }
+  .xp-btn {
+    min-height: 36px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 9px;
+    border: 1px solid var(--xp-line-strong);
+    background: var(--xp-surface);
+    font-weight: 550;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .xp-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .xp-btn-primary {
+    background: var(--xp-accent);
+    border-color: var(--xp-accent);
+    color: var(--xp-accent-ink);
+  }
+  .xp-label {
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--xp-muted);
+  }
+}
+
+/* Lesson prose (MDX). */
+@layer components {
+  .lesson h1 {
+    margin: 12px 0 14px;
+    font-size: clamp(30px, 6vw, 40px);
+    line-height: 1.12;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+  }
+  .lesson > p,
+  .lesson > ul {
+    margin: 0 0 16px;
+    font-size: 17px;
+    line-height: 1.65;
+  }
+  .lesson > h1 + p {
+    font-size: 19px;
+    color: var(--xp-muted);
+  }
+  .lesson h2 {
+    margin: 36px 0 8px;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .lesson a:not(.xp-btn) {
+    color: var(--xp-accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .lesson code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--xp-surface-2);
+    border: 1px solid var(--xp-line);
+  }
+  .lesson blockquote {
+    margin: 22px 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--xp-accent-soft);
+    font-size: 16px;
+    line-height: 1.55;
   }
 }

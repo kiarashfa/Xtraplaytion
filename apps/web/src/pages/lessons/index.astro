@@ -1,0 +1,40 @@
+---
+import { useTranslations } from '../../i18n';
+import Base from '../../layouts/Base.astro';
+import { url } from '../../lib/url.ts';
+
+const t = useTranslations();
+const lessons = [
+  {
+    n: 1,
+    slug: 'activations-and-extrapolation',
+    title: 'Activations and extrapolation',
+    summary: 'Three networks, one gap in the data. Guess which one fills it, then watch them race.',
+    minutes: 6,
+  },
+];
+---
+
+<Base title={t('lessons.title')} description={t('lessons.description')}>
+  <section class="py-8 sm:py-12">
+    <h1 class="text-4xl font-bold tracking-tight">{t('lessons.title')}</h1>
+    <p class="mt-3 max-w-2xl text-lg text-muted">{t('lessons.lead')}</p>
+    <ul class="mt-8 grid gap-4 sm:grid-cols-2">
+      {lessons.map((l) => (
+        <li>
+          <a
+            href={url(`lessons/${l.slug}/`)}
+            class="xp-card flex h-full flex-col gap-2 p-5 hover:border-accent"
+          >
+            <span class="text-[13px] font-semibold text-accent">
+              {t('lessons.lesson', { n: l.n })} · {t('lessons.minutes', { n: l.minutes })}
+            </span>
+            <span class="text-xl font-bold tracking-tight">{l.title}</span>
+            <span class="text-muted">{l.summary}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+    <p class="mt-8 text-muted">{t('lessons.soon')}</p>
+  </section>
+</Base>

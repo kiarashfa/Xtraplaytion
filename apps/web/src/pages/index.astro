@@ -1,0 +1,47 @@
+---
+import ExtrapolationFigure from '../components/ExtrapolationFigure.astro';
+import { useTranslations } from '../i18n';
+import Base from '../layouts/Base.astro';
+
+const t = useTranslations();
+const features = [
+  t('home.feature.target'),
+  t('home.feature.ood'),
+  t('home.feature.race'),
+  t('home.feature.export'),
+];
+---
+
+<Base>
+  <section class="pt-6 pb-10 sm:pt-12">
+    <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-sm text-muted">
+      <span class="size-2 rounded-full bg-target" aria-hidden="true"></span>
+      <span>
+        <strong class="font-semibold text-ink">{t('home.status')}.</strong> {t('home.statusDetail')}
+      </span>
+    </p>
+    <h1 class="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl">
+      {t('home.title')}
+    </h1>
+    <p class="mt-5 max-w-2xl text-lg text-muted">{t('home.lead')}</p>
+  </section>
+
+  <ExtrapolationFigure />
+
+  <section class="mt-12 grid gap-8 sm:grid-cols-[1fr_1fr]">
+    <div>
+      <h2 class="text-xl font-semibold tracking-tight">{t('home.featuresTitle')}</h2>
+      <ul class="mt-4 space-y-3">
+        {features.map((item) => (
+          <li class="flex gap-3">
+            <span class="mt-2 size-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+    <div class="self-start rounded-2xl border border-line bg-surface p-5 text-muted">
+      <p>{t('home.privacy')}</p>
+    </div>
+  </section>
+</Base>

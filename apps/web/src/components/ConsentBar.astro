@@ -1,0 +1,128 @@
+---
+// Slim consent bar for Google Analytics. Nothing from Google loads until the visitor accepts.
+import { useTranslations } from '../i18n';
+import { SITE } from '../site.config.ts';
+
+const t = useTranslations();
+const { enabled, ga4MeasurementId } = SITE.analytics;
+const button =
+  'min-h-11 flex-1 cursor-pointer rounded-full border border-line bg-bg px-5 text-sm font-semibold text-ink hover:border-accent sm:min-w-28 sm:flex-none';
+---
+
+{enabled && (
+  <div
+    class="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface shadow-[0_-4px_16px_rgb(0_0_0/0.08)]"
+    data-consent
+    data-ga-id={ga4MeasurementId}
+    role="region"
+    aria-label={t('consent.label')}
+    hidden
+  >
+    <div class="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-3 text-sm sm:flex-row sm:items-center sm:gap-6 sm:px-6">
+      <p class="flex-1">
+        <strong class="font-semibold">{t('consent.title')}</strong> {t('consent.body')}
+      </p>
+      {/* Both choices look exactly the same: declining is as easy as accepting. */}
+      <div class="flex gap-2">
+        <button type="button" class={button} data-consent-choice="denied">
+          {t('consent.decline')}
+        </button>
+        <button type="button" class={button} data-consent-choice="granted">
+          {t('consent.accept')}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+<script>
+  import { CONSENT_KEY, readConsent, type Consent } from '../lib/consent.ts';
+
+  const bar = document.querySelector<HTMLElement>('[data-consent]');
+  const id = bar?.dataset['gaId'] ?? '';
+
+  declare global {
+    interface Window {
+      dataLayer?: unknown[];
+      [key: `ga-disable-${string}`]: boolean | undefined;
+    }
+  }
+
+  function startAnalytics() {
+    if (!id || window.dataLayer) return;
+    window.dataLayer = [];
+    window[`ga-disable-${id}`] = false;
+    // gtag expects the arguments object itself.
+    function gtag(..._args: unknown[]) {
+      // eslint-disable-next-line prefer-rest-params
+      window.dataLayer?.push(arguments);
+    }
+    gtag('js', new Date());
+    gtag('config', id, {
+      // Only origin and path: the fragment (share links carry experiments there) and query stay private.
+      page_location: location.origin + location.pathname,
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
+    });
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
+    document.head.append(script);
+  }
+
+  function stopAnalytics() {
+    if (id) window[`ga-disable-${id}`] = true;
+    for (const cookie of document.cookie.split(';')) {
+      const name = cookie.split('=')[0]?.trim() ?? '';
+      if (name === '_ga' || name.startsWith('_ga_')) {
+        for (const domain of [
+          '',
+          `; domain=${location.hostname}`,
+          `; domain=.${location.hostname}`,
+        ]) {
+          document.cookie = `${name}=; Max-Age=0; path=/${domain}`;
+        }
+      }
+    }
+  }
+
+  // Reserve room under the page while the bar is open so it never covers the footer.
+  function show(el: HTMLElement) {
+    el.hidden = false;
+    document.body.style.paddingBlockEnd = `${el.offsetHeight}px`;
+  }
+
+  function hide(el: HTMLElement) {
+    el.hidden = true;
+    document.body.style.paddingBlockEnd = '';
+  }
+
+  function choose(choice: Consent) {
+    try {
+      localStorage.setItem(CONSENT_KEY, choice);
+    } catch {
+      // Without storage the choice lasts for this page view.
+    }
+    if (choice === 'granted') startAnalytics();
+    else stopAnalytics();
+    if (bar) hide(bar);
+  }
+
+  if (bar) {
+    const choice = readConsent();
+    if (choice === 'granted') startAnalytics();
+    else if (choice === null) show(bar);
+    bar.addEventListener('click', (event) => {
+      const button = (event.target as Element).closest<HTMLElement>('[data-consent-choice]');
+      if (button) choose(button.dataset['consentChoice'] as Consent);
+    });
+    // "Cookie settings" links and buttons anywhere on the page reopen the bar.
+    document.addEventListener('click', (event) => {
+      if ((event.target as Element).closest('[data-consent-open]')) {
+        event.preventDefault();
+        show(bar);
+        bar.querySelector('button')?.focus();
+      }
+    });
+  }
+</script>

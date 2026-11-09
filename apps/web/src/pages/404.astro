@@ -1,0 +1,21 @@
+---
+import { useTranslations } from '../i18n';
+import Base from '../layouts/Base.astro';
+import { url } from '../lib/url.ts';
+
+const t = useTranslations();
+---
+
+<Base title={t('notFound.title')}>
+  <section class="py-16 sm:py-24">
+    <p class="font-mono text-sm text-muted">404</p>
+    <h1 class="mt-2 text-4xl font-bold tracking-tight">{t('notFound.title')}</h1>
+    <p class="mt-4 text-lg text-muted">{t('notFound.body')}</p>
+    <a
+      href={url()}
+      class="mt-8 inline-flex min-h-11 items-center rounded-full bg-accent px-5 font-medium text-accent-ink"
+    >
+      {t('notFound.home')}
+    </a>
+  </section>
+</Base>

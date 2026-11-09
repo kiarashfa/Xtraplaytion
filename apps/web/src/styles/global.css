@@ -1,0 +1,99 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource/jetbrains-mono/400.css';
+
+/* Theme is set on <html data-theme> by the inline head script. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Semantic tokens. Placeholder palette until the design mocks are approved. */
+:root {
+  color-scheme: light;
+  --xp-bg: #f5f7fb;
+  --xp-surface: #ffffff;
+  --xp-ink: #111827;
+  --xp-muted: #4b5563;
+  --xp-line: #d6dde8;
+  --xp-accent: #1d5fd6;
+  --xp-accent-ink: #ffffff;
+  --xp-target: #d9480f;
+  --xp-model: #1d5fd6;
+  --xp-band: #f4ead9;
+  --xp-band-edge: #8a6d3b;
+  --xp-focus: #1d5fd6;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --xp-bg: #0b1020;
+  --xp-surface: #121a2e;
+  --xp-ink: #e6eaf2;
+  --xp-muted: #a3adbf;
+  --xp-line: #2a3550;
+  --xp-accent: #82acff;
+  --xp-accent-ink: #0b1020;
+  --xp-target: #ff8a65;
+  --xp-model: #82acff;
+  --xp-band: #2b2516;
+  --xp-band-edge: #c9a96a;
+  --xp-focus: #82acff;
+}
+
+/* No-JS fallback: follow the system setting. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --xp-bg: #0b1020;
+    --xp-surface: #121a2e;
+    --xp-ink: #e6eaf2;
+    --xp-muted: #a3adbf;
+    --xp-line: #2a3550;
+    --xp-accent: #82acff;
+    --xp-accent-ink: #0b1020;
+    --xp-target: #ff8a65;
+    --xp-model: #82acff;
+    --xp-band: #2b2516;
+    --xp-band-edge: #c9a96a;
+    --xp-focus: #82acff;
+  }
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --color-bg: var(--xp-bg);
+  --color-surface: var(--xp-surface);
+  --color-ink: var(--xp-ink);
+  --color-muted: var(--xp-muted);
+  --color-line: var(--xp-line);
+  --color-accent: var(--xp-accent);
+  --color-accent-ink: var(--xp-accent-ink);
+  --color-target: var(--xp-target);
+  --color-model: var(--xp-model);
+  --color-band: var(--xp-band);
+  --color-band-edge: var(--xp-band-edge);
+}
+
+@layer base {
+  html {
+    background: var(--xp-bg);
+    color: var(--xp-ink);
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--xp-focus);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

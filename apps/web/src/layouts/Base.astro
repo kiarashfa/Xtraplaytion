@@ -1,0 +1,66 @@
+---
+import '../styles/global.css';
+import ConsentBar from '../components/ConsentBar.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import ThemeToggle from '../components/ThemeToggle.svelte';
+import { localeInfo, useTranslations } from '../i18n';
+import { THEME_INIT_SCRIPT, THEME_KEY } from '../lib/theme.ts';
+import { url } from '../lib/url.ts';
+import { SITE } from '../site.config.ts';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const t = useTranslations();
+const locale = localeInfo();
+const { title, description = t('site.description') } = Astro.props;
+const pageTitle = title ? `${title} · ${SITE.name}` : SITE.name;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang={locale.code} dir={locale.dir}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href={url('favicon.svg')} type="image/svg+xml" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+  </head>
+  <body class="flex min-h-dvh flex-col bg-bg text-ink antialiased">
+    {/* Runs before first paint and after the CSP meta tag; its hash is added in astro.config.ts. */}
+    <script is:inline set:html={THEME_INIT_SCRIPT} />
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-10 focus:rounded-md focus:bg-surface focus:px-4 focus:py-2"
+    >
+      {t('nav.skip')}
+    </a>
+    <header class="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+      <a href={url()} class="flex min-h-11 items-center gap-2 text-lg font-semibold tracking-tight">
+        <img src={url('favicon.svg')} alt="" width="28" height="28" />
+        <span>{SITE.name}</span>
+      </a>
+      <ThemeToggle
+        client:load
+        storageKey={THEME_KEY}
+        labels={{
+          label: t('theme.label'),
+          system: t('theme.system'),
+          light: t('theme.light'),
+          dark: t('theme.dark'),
+        }}
+      />
+    </header>
+    <main id="main" class="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6">
+      <slot />
+    </main>
+    <SiteFooter />
+    <ConsentBar />
+  </body>
+</html>

@@ -198,7 +198,7 @@ Section 4(e) continues to apply to any such embedding.
 A3. Third-Party Notices
 
 Third-Party Material used by this project is identified in the file
-THIRD_PARTY_NOTICES in this repository. Section 6 applies to everything
+THIRD_PARTY.md in this repository. Section 6 applies to everything
 listed in that file.
 
 A4. Lessons and Other Content

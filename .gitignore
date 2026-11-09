@@ -4,3 +4,21 @@ memory.md
 spec.md
 CLAUDE.md
 .claude/
+
+# Node / Astro
+node_modules/
+dist/
+.astro/
+.env
+.env.*
+
+# Test and tool output
+coverage/
+test-results/
+*.tsbuildinfo
+.eslintcache
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

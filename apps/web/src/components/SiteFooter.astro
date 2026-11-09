@@ -1,0 +1,32 @@
+---
+import { useTranslations } from '../i18n';
+import { repoFile, url } from '../lib/url.ts';
+import { SITE } from '../site.config.ts';
+
+const t = useTranslations();
+const link = 'inline-flex min-h-11 items-center underline-offset-4 hover:underline';
+---
+
+<footer class="mt-16 border-t border-line">
+  <div class="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 py-6 text-sm text-muted sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
+    <p>
+      {t('footer.copyright', { year: SITE.copyrightYear })}. {t('footer.licenseNote')}.
+    </p>
+    <nav class="flex flex-wrap gap-x-4" aria-label={t('footer.label')}>
+      <a class={link} href={repoFile('LICENSE')}>
+        {t('footer.license')}
+      </a>
+      <a class={link} href={url('THIRD_PARTY.md')}>
+        {t('footer.notices')}
+      </a>
+      <a class={link} href={SITE.repoUrl}>
+        {t('footer.source')}
+      </a>
+      {SITE.analytics.enabled && (
+        <button type="button" class={`${link} cursor-pointer`} data-consent-open>
+          {t('footer.cookies')}
+        </button>
+      )}
+    </nav>
+  </div>
+</footer>

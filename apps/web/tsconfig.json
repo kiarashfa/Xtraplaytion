@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["astro/client", "node"],
+    "jsx": "preserve"
+  },
+  "include": [".astro/types.d.ts", "src", "scripts", "e2e", "*.config.ts"]
+}

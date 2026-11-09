@@ -1,6 +1,13 @@
 // Share links: the whole experiment, compressed into the URL fragment (#s=...).
 // The fragment never reaches a server. Decoding validates everything and caps sizes.
-import type { Activation, LossKind, MLPConfig, Noise, OptimizerKind } from '@xtraplaytion/engine';
+import type {
+  Activation,
+  BackendChoice,
+  LossKind,
+  MLPConfig,
+  Noise,
+  OptimizerKind,
+} from '@xtraplaytion/engine';
 
 export const STATE_VERSION = 2;
 const MAX_DECODED = 64 * 1024;
@@ -26,6 +33,8 @@ export interface ExperimentState {
   models: SharedModel[];
   epochs: number;
   layout: 'overlay' | 'stacked';
+  /** Where to train; absent means auto. */
+  backend?: BackendChoice;
 }
 
 export const LIMITS = {
@@ -180,6 +189,7 @@ export function validateState(o: unknown): ExperimentState | null {
     models,
     epochs: Math.round(clamp(s['epochs'], 1, LIMITS.epochs)),
     layout: s['layout'] === 'stacked' ? 'stacked' : 'overlay',
+    ...(s['backend'] === 'cpu' || s['backend'] === 'gpu' ? { backend: s['backend'] } : {}),
   };
 }
 

@@ -19,6 +19,7 @@
     compact = false,
     short = false,
     tag,
+    fixed = false,
   }: {
     pg: Playground;
     /** The models drawn in this plot (all visible ones, or one when stacked). */
@@ -26,6 +27,8 @@
     compact?: boolean;
     short?: boolean;
     tag?: string;
+    /** No draggable range edges (lessons). */
+    fixed?: boolean;
   } = $props();
   const t = useTranslations();
 
@@ -71,7 +74,7 @@
         gap: t('pg.region.gap'),
         beyond: t('pg.region.beyond'),
       },
-      handles: true,
+      handles: !fixed,
       activeEdge: drag?.edge ?? null,
       crosshairX: hoverX,
       compact,
@@ -119,6 +122,7 @@
   }
 
   function onDown(e: PointerEvent) {
+    if (fixed) return;
     const edge = hit(e);
     if (!edge || !canvas) return;
     canvas.setPointerCapture(e.pointerId);
@@ -141,7 +145,7 @@
       drag = { ...drag, bands: next };
       return;
     }
-    canvas.style.cursor = hit(e) ? 'ew-resize' : 'crosshair';
+    canvas.style.cursor = !fixed && hit(e) ? 'ew-resize' : 'crosshair';
     hoverX = e.pointerType === 'mouse' && e.offsetX >= f.x0 && e.offsetX <= f.x0 + f.w ? x : null;
   }
 

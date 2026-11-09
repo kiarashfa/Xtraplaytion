@@ -11,7 +11,8 @@
     "test": "vitest run --project unit",
     "test:e2e": "vitest run --project e2e",
     "notices:check": "node scripts/notices.ts --check",
-    "notices:update": "node scripts/notices.ts --update"
+    "notices:update": "node scripts/notices.ts --update",
+    "record": "node scripts/record.ts"
   },
   "dependencies": {
     "@astrojs/mdx": "8.1.2",

@@ -1,7 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { useTranslations } from '../../i18n';
-  import { cachedSpeed, formatDuration, measureSpeed } from '../../lib/capability.ts';
+  import {
+    cachedGpu,
+    cachedSpeed,
+    formatDuration,
+    measureGpu,
+    measureSpeed,
+  } from '../../lib/capability.ts';
   import { Playground } from '../../lib/playground.svelte.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import { decodeState, encodeState } from '../../lib/share.ts';
@@ -63,17 +69,22 @@
     addEventListener('hashchange', onHash);
 
     // Device speed for time estimates: cached, or measured once the page has settled.
+    // The GPU (when there is WebGPU) is measured right after the processor.
     const cached = cachedSpeed();
-    let benchTimer = 0;
+    const cachedG = cachedGpu();
     if (cached) {
       pg.deviceSpeed = cached;
       pg.deviceMeasured = true;
-    } else {
-      benchTimer = window.setTimeout(() => {
-        measureSpeed().then((v) => {
-          pg.deviceSpeed = v;
+    }
+    if (cachedG) pg.gpuSpeed = cachedG;
+    let benchTimer = 0;
+    if (!cached || (pg.webgpu && !cachedG)) {
+      benchTimer = window.setTimeout(async () => {
+        if (!cached) {
+          pg.deviceSpeed = await measureSpeed();
           pg.deviceMeasured = true;
-        });
+        }
+        if (pg.webgpu && !cachedG) pg.gpuSpeed = await measureGpu();
       }, 1200);
     }
 
@@ -98,6 +109,7 @@
     if (!loaded) return;
     void pg.data;
     void pg.trainingKey;
+    void pg.recordingWanted;
     const id = setTimeout(() => pg.restart(), 120);
     return () => clearTimeout(id);
   });
@@ -130,6 +142,32 @@
     }),
   );
   const slow = $derived(pg.clock === 0 && pg.status !== 'running' && pg.estimateTotal > 600);
+  const backendChoices = ['auto', 'cpu', 'gpu'] as const;
+  const names = (rs: typeof pg.runs) => rs.map((r) => `N${r.spec.color}`).join(', ');
+  // GPU trouble worth telling (a lost device, or a model that could not use the GPU).
+  const gpuNotice = $derived.by(() => {
+    const lost = pg.runs.filter((r) => r.recoveredAt !== null);
+    if (lost.length) {
+      const onCpu = lost.filter((r) => r.backend === 'cpu-f64');
+      const key = onCpu.length ? 'pg.backend.lost' : 'pg.backend.restarted';
+      return t(key, {
+        names: names(lost),
+        epoch: Math.min(...lost.map((r) => r.recoveredAt ?? 0)),
+      });
+    }
+    if (pg.backend === 'cpu') return '';
+    const big = pg.runs.filter((r) => r.fallback === 'outOfMemory');
+    if (big.length) return t('pg.backend.tooBig', { names: names(big), count: big.length });
+    const failed = pg.runs.filter(
+      (r) => r.fallback === 'deviceError' || (r.fallback === 'noAdapter' && pg.backend === 'gpu'),
+    );
+    if (failed.length)
+      return t('pg.backend.failed', { names: names(failed), count: failed.length });
+    return '';
+  });
+  const backendHint = $derived(
+    pg.backend !== 'cpu' && !pg.gpuSpeed ? 'none' : (pg.backend as 'auto' | 'cpu' | 'gpu'),
+  );
   const layouts = ['overlay', 'stacked'] as const;
   // Round epoch counts on a roughly logarithmic scale (the number field takes any value).
   const EPOCH_STEPS = [
@@ -225,6 +263,27 @@
                     oninput={(e) => (pg.epochs = EPOCH_STEPS[Number(e.currentTarget.value)])}
                   />
                 </div>
+                <span class="xp-label mt-2" id="backend-label">{t('pg.backend')}</span>
+                <div
+                  class="flex rounded-lg border border-line bg-surface-2 p-0.5 text-[13px]"
+                  role="group"
+                  aria-labelledby="backend-label"
+                >
+                  {#each backendChoices as b (b)}
+                    <button
+                      type="button"
+                      class="min-h-10 flex-1 rounded-md px-2.5 font-semibold {pg.backend === b
+                        ? 'bg-surface text-ink shadow-sm'
+                        : 'text-muted hover:text-ink'}"
+                      aria-pressed={pg.backend === b}
+                      data-backend-choice={b}
+                      onclick={() => (pg.backend = b)}>{t(`pg.backend.${b}`)}</button
+                    >
+                  {/each}
+                </div>
+                <p class="text-xs text-muted" data-backend-hint>
+                  {t(`pg.backend.hint.${backendHint}`)}
+                </p>
               </div>
             {/if}
           </div>
@@ -236,6 +295,29 @@
   <div class="order-1 flex min-w-0 flex-col gap-3 p-2.5 sm:p-3.5 md:order-2">
     <RunBar {pg} onshare={share} compact={mobile} />
 
+    {#if pg.mode === 'recorded'}
+      <div
+        class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm"
+        role="status"
+        data-recorded-notice
+      >
+        <Icon name="info" /><span class="min-w-0 flex-1"
+          >{t('pg.recorded.notice', { time: formatDuration(pg.estimateTotal) })}</span
+        >
+        <button type="button" class="xp-btn min-h-10" onclick={() => pg.trainLive()}
+          >{t('pg.recorded.live')}</button
+        >
+      </div>
+    {/if}
+    {#if gpuNotice}
+      <p
+        class="flex items-center gap-2 rounded-xl border border-line bg-accent-soft px-3 py-2 text-sm"
+        role="status"
+        data-gpu-notice
+      >
+        <Icon name="info" />{gpuNotice}
+      </p>
+    {/if}
     {#if diverged || failure || pg.pausedByHiddenTab || slow}
       <p
         class="flex items-center gap-2 rounded-xl border border-line bg-accent-soft px-3 py-2 text-sm"

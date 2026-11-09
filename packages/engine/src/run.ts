@@ -142,6 +142,25 @@ export class MLPRun implements Model {
     };
   }
 
+  /** Continues from a checkpoint (for example one taken on the GPU before it was lost). */
+  restore(cp: {
+    epoch: number;
+    steps: number;
+    params: ArrayLike<number>;
+    m: ArrayLike<number>;
+    v: ArrayLike<number>;
+    trainLoss: number[];
+    valLoss: number[];
+  }): void {
+    this.net.params.set(cp.params);
+    this.opt.load(cp.m, cp.v, cp.steps);
+    this.trainLoss.length = 0;
+    this.valLoss.length = 0;
+    for (const x of cp.trainLoss) this.trainLoss.push(x);
+    for (const x of cp.valLoss) this.valLoss.push(x);
+    this.ep = cp.epoch;
+  }
+
   dispose(): void {
     this.trainLoss.length = 0;
     this.valLoss.length = 0;

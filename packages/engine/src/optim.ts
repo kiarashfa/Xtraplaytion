@@ -85,6 +85,17 @@ export class Optimizer {
     }
   }
 
+  /** Optimizer state, for moving a run between devices. */
+  state(): { m: Float64Array; v: Float64Array; steps: number } {
+    return { m: this.m.slice(), v: this.v.slice(), steps: this.t };
+  }
+
+  load(m: ArrayLike<number>, v: ArrayLike<number>, steps: number): void {
+    this.m.set(m);
+    this.v.set(v);
+    this.t = steps;
+  }
+
   reset(): void {
     this.m.fill(0);
     this.v.fill(0);

@@ -1,9 +1,21 @@
 // Page-side client of one training worker. Frames are acknowledged on the next
 // animation frame, so training never runs ahead of what the screen can show.
-import type { Dataset, FrameMsg, FromWorker, MLPConfig, ToWorker } from '@xtraplaytion/engine';
+import type {
+  Backend,
+  BackendChoice,
+  Dataset,
+  FallbackReason,
+  FrameMsg,
+  FromWorker,
+  MLPConfig,
+  ReadyMsg,
+  ToWorker,
+} from '@xtraplaytion/engine';
 
 export interface TrainerEvents {
-  ready?(paramCount: number): void;
+  ready?(m: ReadyMsg): void;
+  /** The GPU was lost; training went on from `epoch` on `backend`. */
+  recovered?(epoch: number, backend: Backend, reason: FallbackReason): void;
   frame?(f: FrameMsg): void;
   done?(reason: 'finished' | 'diverged', epoch: number): void;
   error?(message: string): void;
@@ -15,6 +27,8 @@ export interface StartOptions {
   seed: number;
   epochs: number;
   epochsPerFrame: number;
+  /** Default 'cpu'. */
+  backend?: BackendChoice;
 }
 
 export interface TrainerOptions {
@@ -38,6 +52,10 @@ export class Series {
   }
   clear() {
     this.length = 0;
+  }
+  /** Drops values from index `n` on (a GPU recovery resends losses after a checkpoint). */
+  truncate(n: number) {
+    this.length = Math.max(0, Math.min(this.length, n));
   }
   view(): Float64Array {
     return this.data.subarray(0, this.length);
@@ -73,13 +91,12 @@ export class Trainer {
     if (m.runId !== id) return; // a message from a run we already replaced
     switch (m.type) {
       case 'ready':
-        this.events.ready?.(m.paramCount);
+        this.events.ready?.(m);
         break;
       case 'frame':
-        if (m.epoch === 0) {
-          this.trainLoss.clear();
-          this.valLoss.clear();
-        }
+        // The new losses end at m.epoch (after a recovery they can start before the last frame).
+        this.trainLoss.truncate(m.epoch - m.newTrainLoss.length);
+        this.valLoss.truncate(m.epoch - m.newValLoss.length);
         this.trainLoss.push(m.newTrainLoss);
         this.valLoss.push(m.newValLoss);
         this.events.frame?.(m);
@@ -90,6 +107,9 @@ export class Trainer {
         break;
       case 'error':
         this.events.error?.(m.message);
+        break;
+      case 'recovered':
+        this.events.recovered?.(m.epoch, m.backend, m.reason);
         break;
     }
   }

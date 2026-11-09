@@ -26,6 +26,7 @@
       return {
         spec: m,
         status: run?.status,
+        gpu: run?.backend === 'webgpu',
         values: {
           inside: f?.metrics.inside ?? NaN,
           val,
@@ -92,6 +93,10 @@
           <th scope="row" class="px-2.5 py-2 text-start font-sans font-semibold whitespace-nowrap"
             ><span class="flex items-center gap-2"
               ><Swatch color={r.spec.color} width={22} />N{r.spec.color}
+              {#if r.gpu}<abbr
+                  class="rounded-full border border-line px-1.5 text-[10.5px] font-medium text-muted no-underline"
+                  title={t('pg.score.gpuHelp')}>{t('pg.score.gpu')}</abbr
+                >{/if}
               {#if b}<span
                   class="rounded-full bg-accent-soft px-1.5 text-[11px] font-medium text-muted"
                   >{t(b)}</span

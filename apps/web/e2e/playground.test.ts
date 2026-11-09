@@ -206,6 +206,75 @@ describe.each(targets)('$name', (target) => {
     await context.close();
   });
 
+  test('train on: Auto, CPU or GPU, and the badge tells which one runs', async () => {
+    const { context, page, problems } = await openPage(browser, target, baseURL);
+    await page.goto('./playground/', { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => epochOf(page), { timeout: 15000 }).toBeGreaterThan(20);
+    const badge = page.locator('[data-backend]');
+    // Auto: the GPU where this browser has a usable one, otherwise the processor.
+    const where = await badge.getAttribute('data-backend');
+    expect(['gpu', 'cpu']).toContain(where);
+    const tagged = await page.locator('table tbody tr', { hasText: 'GPU' }).count();
+    expect(tagged).toBe(where === 'gpu' ? 1 : 0);
+    await showTab(page, 'Train');
+    await page.locator('[data-backend-choice=cpu]').click();
+    await expect.poll(() => badge.getAttribute('data-backend')).toBe('cpu');
+    expect(await page.locator('[data-backend-hint]').textContent()).toContain('identical');
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => epochOf(page), { timeout: 15000 }).toBeGreaterThan(20);
+    expect(await badge.textContent()).toContain('CPU · exact');
+    expect(await page.locator('table tbody tr', { hasText: 'GPU' }).count()).toBe(0);
+    expect(problems).toEqual([]);
+    await context.close();
+  });
+
+  test('a heavy preset plays its recording where training would be slow', async () => {
+    const { context, page, problems } = await openPage(browser, target, baseURL);
+    await page.goto('./playground/#preset=race-width', { waitUntil: 'networkidle' });
+    // On the processor, a million-parameter network takes far too long: the recording plays.
+    await showTab(page, 'Train');
+    await page.locator('[data-backend-choice=cpu]').click();
+    const notice = page.locator('[data-recorded-notice]');
+    await expect.poll(() => notice.isVisible(), { timeout: 10000 }).toBe(true);
+    expect(await page.locator('[data-backend]').getAttribute('data-backend')).toBe('recorded');
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => epochOf(page), { timeout: 20000 }).toBe(1600);
+    const rows = await page.locator('table tbody tr').allTextContents();
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => /\d\.\d{3}/.test(r))).toBe(true);
+    expect(rows[2]).toContain('1,004,001');
+    // Replay works on recordings too.
+    await page.getByRole('slider', { name: 'Epoch shown' }).fill('400');
+    expect(await epochOf(page)).toBe(400);
+    await page.getByRole('button', { name: 'Train it yourself' }).click();
+    await expect.poll(() => notice.isVisible()).toBe(false);
+    await expect
+      .poll(() => page.locator('[data-backend]').getAttribute('data-backend'))
+      .toBe('cpu');
+    expect(await epochOf(page)).toBe(0);
+    expect(problems).toEqual([]);
+    await context.close();
+  });
+
+  test('lesson 2: a recorded race and a live one, both revealed', async () => {
+    const { context, page, problems } = await openPage(browser, target, baseURL);
+    await page.goto('./lessons/width-depth-and-spectral-bias/', { waitUntil: 'networkidle' });
+    for (const id of ['race-width', 'race-depth']) {
+      const race = page.locator(`[data-lesson-race=${id}]`);
+      await race.getByRole('radio').nth(1).click();
+      await race.getByRole('button', { name: 'Run the race' }).click();
+      await expect
+        .poll(() => race.getByText(/Well spotted|Not this time/).isVisible(), { timeout: 30000 })
+        .toBe(true);
+    }
+    expect(await page.locator('[data-lesson-race=race-width]').getByText('Recorded').count()).toBe(
+      1,
+    );
+    expect(problems).toEqual([]);
+    await context.close();
+  });
+
   test('lesson: predict, race, reveal', async () => {
     const { context, page, problems } = await openPage(browser, target, baseURL);
     await page.goto('./lessons/activations-and-extrapolation/', { waitUntil: 'networkidle' });

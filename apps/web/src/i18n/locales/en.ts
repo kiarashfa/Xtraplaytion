@@ -146,8 +146,39 @@ const en = {
   'pg.run.estimate': 'Estimate',
   'pg.run.slow':
     'This race may take about {time} on this device. Fewer epochs, points or neurons make it faster.',
-  'pg.run.backend': 'CPU · exact',
-  'pg.run.backendHint': 'Runs on your processor. Results are identical in every browser.',
+  'pg.run.backend.cpu': 'CPU · exact',
+  'pg.run.backend.cpu.hint': 'Runs on your processor. Results are identical in every browser.',
+  'pg.run.backend.gpu': 'GPU · fast',
+  'pg.run.backend.gpu.hint':
+    'Runs on your graphics card in single precision. Fast, but results are approximate and can differ slightly between devices.',
+  'pg.run.backend.mixed': 'GPU + CPU',
+  'pg.run.backend.mixed.hint':
+    'Some models train on the graphics card (fast, approximate), the others on the processor (exact).',
+  'pg.run.backend.recorded': 'Recorded',
+  'pg.run.backend.recorded.hint':
+    'A recording of this race, trained earlier on a graphics card. It plays the same on every device.',
+  'pg.recorded.notice':
+    'You are watching a recording: training this race here would take about {time}. Change anything to train for real.',
+  'pg.recorded.live': 'Train it yourself',
+  'pg.backend': 'Train on',
+  'pg.backend.auto': 'Auto',
+  'pg.backend.cpu': 'CPU',
+  'pg.backend.gpu': 'GPU',
+  'pg.backend.hint.auto':
+    'Auto uses the graphics card: fast, with approximate results. Pick CPU for results that are identical in every browser.',
+  'pg.backend.hint.cpu':
+    'The processor gives identical results in every browser, but big networks train slowly.',
+  'pg.backend.hint.gpu':
+    'The graphics card trains in single precision: fast, but results can differ slightly between devices.',
+  'pg.backend.hint.none':
+    'This browser has no WebGPU, so models train on the processor (exact results in every browser).',
+  'pg.backend.lost':
+    'The graphics card stopped responding, so {names} went on from epoch {epoch} on the processor.',
+  'pg.backend.restarted': 'The graphics card restarted. {names} went on from epoch {epoch}.',
+  'pg.backend.tooBig':
+    '{names} did not fit on the graphics card, so {count, plural, one {it trains} other {they train}} on the processor.',
+  'pg.backend.failed':
+    'The graphics card could not be used, so {names} {count, plural, one {trains} other {train}} on the processor.',
   'pg.status.ready': 'Ready. Press play to start training.',
   'pg.status.running': 'Training started.',
   'pg.status.paused': 'Paused at epoch {epoch} of {total}.',
@@ -192,6 +223,8 @@ const en = {
   'pg.score.gap': 'In the gap',
   'pg.score.beyond': 'Beyond data',
   'pg.score.params': 'Params',
+  'pg.score.gpu': 'GPU',
+  'pg.score.gpuHelp': 'Trained on the graphics card: the numbers are approximate.',
   'pg.score.gapHelp': 'Between training ranges. Also called interpolation.',
   'pg.score.beyondHelp': 'Outside all training ranges. Also called extrapolation.',
   'pg.mobile.tabs': 'Settings',
@@ -232,7 +265,8 @@ const en = {
   'loss.l1': 'L1 (absolute error)',
   'loss.huber': 'Huber',
 
-  'preset.race-width.name': 'Race: how width changes the fit',
+  'preset.race-width.name': 'Race: 10, 100 or 1,000 neurons wide',
+  'preset.race-depth.name': 'Race: one wide layer or three thin ones',
   'preset.race-activations.name': 'Race: ReLU, tanh or sin in a gap',
   'preset.race-shallow.name': 'Race: wide, shallow ReLU networks',
   'preset.race-noisy-parabola.name': 'Race: small and big nets on noisy data',
@@ -270,6 +304,11 @@ const en = {
   'predict.pick': 'Pick one, then run the race.',
   'predict.right': 'Well spotted: {choice} fills the middle best.',
   'predict.wrong': 'Not this time: {choice} does better here. Look at the middle of each plot.',
+  'lrace.right': 'Well spotted: {choice} ends closest to the true function {where}.',
+  'lrace.wrong': 'Not this time: {choice} ends closest to the true function {where}.',
+  'lrace.where.inside': 'inside the data',
+  'lrace.where.gap': 'in the gap',
+  'lrace.where.beyond': 'beyond the data',
 } as const;
 
 export type MessageKey = keyof typeof en;

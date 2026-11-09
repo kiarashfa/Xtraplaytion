@@ -4,10 +4,13 @@
 // active model, so the race is fair on screen. Every frame goes into a history
 // store, which the replay scrubber reads.
 import {
-  buildDataset,
   mlp,
   paramCountOf,
+  regionMetrics,
   type Activation,
+  type Backend,
+  type BackendChoice,
+  type FallbackReason,
   type Dataset,
   type LossKind,
   type MLPConfig,
@@ -15,9 +18,19 @@ import {
   type OptimizerKind,
 } from '@xtraplaytion/engine';
 import { compile, parse, sample } from '@xtraplaytion/expr';
-import { estimateSeconds, FALLBACK_SPEED } from './capability.ts';
+import {
+  estimateGpuSeconds,
+  estimateSeconds,
+  FALLBACK_GPU,
+  FALLBACK_SPEED,
+  webgpuPresent,
+  type GpuSpeed,
+} from './capability.ts';
+import { datasetFor, presetState, trainingIdentity } from './experiment.ts';
 import { FrameHistory, type StoredFrame } from './history.ts';
 import type { Preset } from './presets.ts';
+import { loadRecording, type Recording, type RecordedModel } from './recording.ts';
+import { recordingUrl } from './recordings.ts';
 import { LIMITS, type ExperimentState } from './share.ts';
 import { Trainer } from './trainer.ts';
 
@@ -83,6 +96,11 @@ export function specConfig(s: ModelSpec): MLPConfig {
 
 export const dimsLabel = (s: ModelSpec) => `[1, ${s.layers.map((l) => l.width).join(', ')}, 1]`;
 
+/** A preset's recording plays instead of live training above this estimated time. */
+export const LIVE_LIMIT_SECONDS = 60;
+/** Assumed display rate when estimating how long a recording plays. */
+const PLAYBACK_FPS = 60;
+
 const FINISHED: ReadonlySet<RunStatus> = new Set(['done', 'diverged', 'error']);
 
 /** One model's live run. */
@@ -99,12 +117,30 @@ export class ModelRun {
   pendingSeq = 0;
   /** Start wave: models started together keep pace with each other. */
   wave = 0;
+  /** Backend in use (null until the worker is ready). */
+  backend = $state<Backend | null>(null);
+  /** Set when the GPU was asked for but this model trains on the CPU. */
+  fallback = $state<FallbackReason | null>(null);
+  /** Epoch from which training continued after the GPU was lost. */
+  recoveredAt = $state<number | null>(null);
+  adapter = '';
 
   constructor(spec: ModelSpec, onDone: (run: ModelRun) => void) {
     this.spec = spec;
     this.trainer = new Trainer(
       {
+        ready: (m) => {
+          this.backend = m.backend;
+          this.fallback = m.fallback ?? null;
+          this.adapter = m.adapter ?? '';
+        },
+        recovered: (epoch, backend, reason) => {
+          this.backend = backend;
+          this.fallback = backend === 'webgpu' ? null : reason;
+          this.recoveredAt = epoch;
+        },
         frame: (f) => {
+          this.backend = f.backend;
           this.history.add({
             epoch: f.epoch,
             grid: f.grid,
@@ -138,6 +174,35 @@ export class ModelRun {
   frameAt(epoch: number): StoredFrame | null {
     void this.version;
     return this.history.at(epoch);
+  }
+
+  /** Recorded runs: the last epoch of the recording, and whether it diverged there. */
+  final = 0;
+  recordedDiverged = false;
+
+  /** Fills the history from a recording (no worker). Playback then moves `latest`. */
+  loadRecorded(m: RecordedModel, data: Dataset, backend: Backend) {
+    this.history.clear();
+    m.grids.forEach((grid, i) => {
+      const epoch = m.frameEpochs[i];
+      this.history.add({
+        epoch,
+        grid,
+        metrics: regionMetrics(grid, data.clean, data.region),
+        trainLoss: epoch > 0 ? m.trainLoss[epoch - 1] : NaN,
+        valLoss: epoch > 0 ? m.valLoss[epoch - 1] : NaN,
+      });
+    });
+    this.trainer.trainLoss.clear();
+    this.trainer.valLoss.clear();
+    this.trainer.trainLoss.push(Float64Array.from(m.trainLoss));
+    this.trainer.valLoss.push(Float64Array.from(m.valLoss));
+    this.final = m.frameEpochs[m.frameEpochs.length - 1] ?? 0;
+    this.recordedDiverged = m.diverged;
+    this.backend = backend;
+    this.status = 'ready';
+    this.latest = 0;
+    this.version++;
   }
 }
 
@@ -185,9 +250,14 @@ export class Playground {
   epochs = $state(1600);
   /** Epochs per frame, a power of two. */
   speed = $state(8);
+  /** Where models train. Auto: the GPU whenever this browser has WebGPU. */
+  backend = $state<BackendChoice>('auto');
   /** Device speed from the first-run benchmark (work units per second). */
   deviceSpeed = $state(FALLBACK_SPEED);
   deviceMeasured = $state(false);
+  /** GPU cost model (null: no usable WebGPU). */
+  gpuSpeed = $state<GpuSpeed | null>(webgpuPresent() ? FALLBACK_GPU : null);
+  readonly webgpu = webgpuPresent();
 
   // ---- runs
   runs = $state.raw<ModelRun[]>([]);
@@ -203,6 +273,19 @@ export class Playground {
   );
   private looping = false;
   private waves = 0;
+
+  // ---- recorded runs
+  /** Preset whose recording may play, and the identity it was recorded for. */
+  private recordedPreset = $state.raw<{ id: string; key: string } | null>(null);
+  /** The visitor asked to train this preset for real. */
+  liveChosen = $state(false);
+  /** Lessons: play a preset's recording whenever there is one (instant, same everywhere). */
+  alwaysRecorded = false;
+  private recording: Recording | null = null;
+  private loadingRecording: string | null = null;
+  /** 'recorded' while the race on screen plays a recording. */
+  mode = $state<'live' | 'recorded'>('live');
+  private lastTick = 0;
 
   parsed = $derived(parse(this.expr));
   fn = $derived(this.parsed.ok ? compile(this.parsed.expr) : null);
@@ -223,16 +306,13 @@ export class Playground {
   data = $derived.by((): Dataset | null => {
     const f = this.fn;
     if (!f) return null;
-    const [a, b] = this.domain;
-    if (!(b > a)) return null;
-    return buildDataset(f, {
-      domain: [a, b],
-      n: Math.max(2, Math.min(LIMITS.n, Math.round(this.n))),
+    return datasetFor(f, {
+      domain: this.domain,
+      n: this.n,
       bands: $state.snapshot(this.bands) as [number, number][],
       noise: this.noise,
       valFraction: this.valFraction,
       seed: this.seed,
-      gridSize: 512,
     });
   });
 
@@ -240,8 +320,11 @@ export class Playground {
 
   /** Changes that require retraining (visibility and layout do not). */
   trainingKey = $derived(
-    JSON.stringify([this.epochs, this.models.map(({ visible: _v, ...m }) => m)]),
+    JSON.stringify([this.epochs, this.backend, this.models.map(({ visible: _v, ...m }) => m)]),
   );
+
+  /** True when new runs are expected to train on the GPU. */
+  onGpu = $derived(this.backend !== 'cpu' && this.gpuSpeed !== null);
 
   /** Shared clock: the slowest model still training sets the pace. */
   clock = $derived.by(() => {
@@ -271,22 +354,39 @@ export class Playground {
     this.models.map((m) => {
       const cfg = specConfig(m);
       const points = this.data ? this.data.trainY.length : this.n;
-      return estimateSeconds(
-        paramCountOf(cfg),
-        points,
-        this.epochs,
-        cfg.activations,
-        this.deviceSpeed,
-      );
+      const params = paramCountOf(cfg);
+      return this.onGpu && this.gpuSpeed
+        ? estimateGpuSeconds(params, points, this.epochs, this.gpuSpeed)
+        : estimateSeconds(params, points, this.epochs, cfg.activations, this.deviceSpeed);
     }),
   );
-  /** Whole race: the slowest model sets the pace, models beyond the worker count wait
-   *  their turn, and parallel workers slow each other down somewhat (shared caches,
-   *  lower boost clocks; about 25% per extra worker, measured on desktop Chrome). */
+  /** Whole race. On the CPU the slowest model sets the pace, models beyond the worker
+   *  count wait their turn, and parallel workers slow each other down somewhat (shared
+   *  caches, lower boost clocks; about 25% per extra worker, measured on desktop
+   *  Chrome). On the GPU, models share one graphics card, so their times add up. */
   estimateTotal = $derived.by(() => {
+    if (this.onGpu) return this.estimates.reduce((s, e) => s + e, 0);
     const k = Math.min(this.models.length, this.maxWorkers);
     const rounds = Math.ceil(this.models.length / this.maxWorkers);
     return Math.max(0, ...this.estimates) * rounds * (1 + 0.25 * (k - 1));
+  });
+
+  /** True when the race on screen should be the preset's recording: the experiment is
+   *  exactly the recorded one and training it here would take too long. */
+  recordingWanted = $derived.by(() => {
+    const r = this.recordedPreset;
+    if (!r || this.liveChosen) return false;
+    if (!this.alwaysRecorded && this.estimateTotal <= LIVE_LIMIT_SECONDS) return false;
+    return trainingIdentity(this.snapshotState()) === r.key;
+  });
+  /** How long the recording takes to play at the current speed. */
+  playbackSeconds = $derived(this.epochs / (this.speed * PLAYBACK_FPS));
+
+  /** Backends in use by the current runs (empty before they are ready). */
+  backends = $derived.by(() => {
+    const list: Backend[] = [];
+    for (const r of this.runs) if (r.backend && !list.includes(r.backend)) list.push(r.backend);
+    return list;
   });
 
   // ---------------------------------------------------------------- runs
@@ -302,6 +402,7 @@ export class Playground {
       seed: run.spec.seed,
       epochs: this.epochs,
       epochsPerFrame: this.speed,
+      backend: this.backend,
     });
     if (this.playing) {
       run.trainer.play();
@@ -323,9 +424,35 @@ export class Playground {
     this.playing = false;
     this.replayEpoch = null;
     this.held = null;
+    this.mode = 'live';
     if (!this.data) {
       this.runs = [];
       return;
+    }
+    if (this.recordingWanted && this.recordedPreset) {
+      const { id, key } = this.recordedPreset;
+      if (this.recording?.key === key) return this.showRecording(this.recording, this.data);
+      const url = recordingUrl(id);
+      if (url) {
+        this.runs = [];
+        if (this.loadingRecording !== url) {
+          this.loadingRecording = url;
+          loadRecording(url).then(
+            (rec) => {
+              this.loadingRecording = null;
+              this.recording = rec;
+              this.restart();
+            },
+            () => {
+              // Recording unavailable: train live instead.
+              this.loadingRecording = null;
+              this.liveChosen = true;
+              this.restart();
+            },
+          );
+        }
+        return;
+      }
     }
     const runs = this.models.map(
       (m) => new ModelRun($state.snapshot(m) as ModelSpec, this.onRunDone),
@@ -333,6 +460,44 @@ export class Playground {
     this.runs = runs;
     this.waves = 0;
     runs.slice(0, this.maxWorkers).forEach((r) => this.startRun(r, 0));
+  }
+
+  private showRecording(rec: Recording, data: Dataset) {
+    this.mode = 'recorded';
+    this.runs = this.models.map((m, i) => {
+      const run = new ModelRun($state.snapshot(m) as ModelSpec, () => {});
+      const rm = rec.models[i];
+      if (rm) run.loadRecorded(rm, data, rec.backend);
+      return run;
+    });
+  }
+
+  /** Plays the recording: every model advances `speed` epochs per animation frame. */
+  private playback = (now: number) => {
+    if (!this.playing || this.mode !== 'recorded') {
+      this.looping = false;
+      return;
+    }
+    const dt = this.lastTick ? Math.max(1, now - this.lastTick) : 1000 / PLAYBACK_FPS;
+    this.lastTick = now;
+    for (const r of this.runs) {
+      if (r.finished) continue;
+      r.latest = Math.min(r.final, r.latest + this.speed);
+      r.epochsPerSec = (this.speed * 1000) / dt;
+      if (r.latest >= r.final) r.status = r.recordedDiverged ? 'diverged' : 'done';
+    }
+    if (this.runs.every((r) => r.finished)) {
+      this.playing = false;
+      this.looping = false;
+      return;
+    }
+    requestAnimationFrame(this.playback);
+  };
+
+  /** Leave the recording and train this experiment for real on this device. */
+  trainLive() {
+    this.liveChosen = true;
+    this.restart();
   }
 
   private loop = () => {
@@ -368,6 +533,15 @@ export class Playground {
     this.replayEpoch = null;
     this.held = null;
     this.playing = true;
+    if (this.mode === 'recorded') {
+      for (const r of this.runs) if (!r.finished) r.status = 'running';
+      this.lastTick = 0;
+      if (!this.looping) {
+        this.looping = true;
+        requestAnimationFrame(this.playback);
+      }
+      return;
+    }
     for (const r of this.runs) {
       if (r.status === 'ready' || r.status === 'paused') {
         r.trainer.play();
@@ -385,7 +559,7 @@ export class Playground {
     this.playing = false;
     for (const r of this.runs) {
       if (r.status === 'running') {
-        r.trainer.pause();
+        if (this.mode === 'live') r.trainer.pause();
         r.status = 'paused';
       }
     }
@@ -402,15 +576,20 @@ export class Playground {
     this.held = null;
     for (const r of this.runs) {
       if (r.status === 'ready' || r.status === 'paused') {
-        r.trainer.step(1);
-        r.status = 'paused';
+        if (this.mode === 'recorded') {
+          r.latest = Math.min(r.final, r.latest + 1);
+          r.status = r.latest < r.final ? 'paused' : r.recordedDiverged ? 'diverged' : 'done';
+        } else {
+          r.trainer.step(1);
+          r.status = 'paused';
+        }
       }
     }
   }
 
   setSpeed(epochsPerFrame: number) {
     this.speed = epochsPerFrame;
-    for (const r of this.runs) r.trainer.setSpeed(epochsPerFrame);
+    if (this.mode === 'live') for (const r of this.runs) r.trainer.setSpeed(epochsPerFrame);
   }
 
   /** Show the run as it was at `epoch` (pauses training). */
@@ -456,24 +635,12 @@ export class Playground {
   }
 
   applyPreset(p: Preset) {
-    this.expr = p.expr;
-    this.domain = [...p.domain];
-    this.n = p.n;
-    this.noiseKind = p.sigma > 0 ? 'gaussian' : 'none';
-    if (p.sigma > 0) this.sigma = p.sigma;
-    this.bands = p.bands.map((b) => [...b] as [number, number]);
-    const list = p.models ?? [{ hidden: p.hidden, act: p.act, lr: p.lr }];
-    this.models = list.map((m, i) =>
-      newSpec(
-        i + 1,
-        i + 1,
-        m.hidden.map((width) => ({ width, act: m.act })),
-        m.lr ?? p.lr,
-      ),
-    );
-    this.selected = 0;
-    this.layout = p.layout ?? (list.length > 1 ? 'stacked' : 'overlay');
-    this.epochs = p.epochs;
+    const backend = this.backend; // a preset does not change where models train
+    const state = presetState(p);
+    this.loadState(state);
+    this.backend = backend;
+    this.liveChosen = false;
+    this.recordedPreset = p.recorded ? { id: p.id, key: trainingIdentity(state) } : null;
   }
 
   // ------------------------------------------------------------ sharing
@@ -491,6 +658,7 @@ export class Playground {
       models: this.models.map((m) => ({ model: specConfig(m), seed: m.seed, visible: m.visible })),
       epochs: this.epochs,
       layout: this.layout,
+      ...(this.backend !== 'auto' ? { backend: this.backend } : {}),
     };
   }
 
@@ -519,5 +687,6 @@ export class Playground {
     this.selected = 0;
     this.layout = s.layout;
     this.epochs = s.epochs;
+    this.backend = s.backend ?? 'auto';
   }
 }

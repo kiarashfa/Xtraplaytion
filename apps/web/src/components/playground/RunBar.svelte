@@ -22,6 +22,10 @@
   );
   const started = $derived(pg.clock > 0 || running);
   const left = $derived.by(() => {
+    if (pg.mode === 'recorded') {
+      const frac = Math.max(0, 1 - pg.clock / pg.epochs);
+      return formatDuration(pg.playbackSeconds * (started ? frac : 1));
+    }
     if (!started) return formatDuration(pg.estimateTotal);
     if (!running || rate <= 0) return '-';
     const waiting = pg.runs.filter((r) => r.status === 'queued').length;
@@ -29,6 +33,14 @@
     return formatDuration(((pg.epochs - pg.clock) / rate) * rounds);
   });
   const nf = new Intl.NumberFormat('en');
+  // What trains where: the runs' real backends once known, the expected one before.
+  const where = $derived.by((): 'cpu' | 'gpu' | 'mixed' | 'recorded' => {
+    if (pg.mode === 'recorded') return 'recorded';
+    const b = pg.backends;
+    if (b.length > 1) return 'mixed';
+    if (b.length === 1) return b[0] === 'webgpu' ? 'gpu' : 'cpu';
+    return pg.onGpu ? 'gpu' : 'cpu';
+  });
 </script>
 
 <div class="xp-card flex flex-wrap items-center gap-x-3 gap-y-2 px-2.5 py-2">
@@ -102,10 +114,16 @@
   {/if}
   <div class="ms-auto flex items-center gap-2">
     <span
-      class="inline-flex h-6 items-center gap-1.5 rounded-full bg-good/15 px-2.5 text-xs font-semibold text-good"
-      title={t('pg.run.backendHint')}
+      class="inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold whitespace-nowrap {where ===
+      'cpu'
+        ? 'bg-good/15 text-good'
+        : where === 'recorded'
+          ? 'bg-line text-muted'
+          : 'bg-accent-soft text-accent'}"
+      title={t(`pg.run.backend.${where}.hint`)}
+      data-backend={where}
     >
-      <span class="size-1.5 rounded-full bg-current"></span>{t('pg.run.backend')}
+      <span class="size-1.5 rounded-full bg-current"></span>{t(`pg.run.backend.${where}`)}
     </span>
     <button type="button" class="xp-btn min-h-11" onclick={onshare}
       ><Icon name="share" />{#if !compact}{t('pg.share')}{/if}<span class="sr-only"

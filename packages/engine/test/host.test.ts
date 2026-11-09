@@ -46,7 +46,7 @@ function lastFrame(h: { frames(): FrameMsg[] }): FrameMsg {
 describe('worker host', () => {
   it('announces the run and sends the untrained frame', () => {
     const h = harness();
-    expect(h.out[0]).toEqual({ type: 'ready', runId: 'r1', paramCount: 97 });
+    expect(h.out[0]).toEqual({ type: 'ready', runId: 'r1', paramCount: 97, backend: 'cpu-f64' });
     expect(h.frames()[0].epoch).toBe(0);
   });
 

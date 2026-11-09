@@ -13,8 +13,10 @@ export interface Preset {
   act: Activation;
   lr: number;
   /** Suggested competitors (a race). Without it the preset trains one model. */
-  models?: { hidden: number[]; act: Activation; lr?: number }[];
+  models?: { hidden: number[]; act: Activation; lr?: number; seed?: number }[];
   layout?: 'overlay' | 'stacked';
+  /** Ships a recorded run (src/recordings/<id>.xpr), played where live training would be slow. */
+  recorded?: boolean;
 }
 
 const p = (
@@ -42,9 +44,22 @@ export const PRESETS: Preset[] = [
     sigma: 0.03,
     epochs: 1600,
     models: [
-      { hidden: [10, 10], act: 'relu' },
-      { hidden: [40, 40], act: 'relu' },
-      { hidden: [100, 100], act: 'relu' },
+      // Same starting seed for all three: only the width differs.
+      { hidden: [10, 10], act: 'relu', seed: 1 },
+      { hidden: [100, 100], act: 'relu', seed: 1 },
+      { hidden: [1000, 1000], act: 'relu', seed: 1 },
+    ],
+    layout: 'stacked',
+    recorded: true,
+  }),
+  // Similar parameter counts, different depth (769, 1,153 and 593 parameters).
+  p('race-depth', 'sin(x) + 0.5 sin(2x) + (1/3) sin(3x)', [-10, 10], {
+    sigma: 0.03,
+    epochs: 1600,
+    models: [
+      { hidden: [256], act: 'relu', seed: 2 },
+      { hidden: [32, 32], act: 'relu', seed: 2 },
+      { hidden: [16, 16, 16], act: 'relu', seed: 2 },
     ],
     layout: 'stacked',
   }),

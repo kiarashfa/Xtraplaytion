@@ -1,0 +1,58 @@
+---
+layout: ../../layouts/Lesson.astro
+title: Width, depth and spectral bias
+description: Three networks of very different sizes learn the same wave. See what a thousand neurons buy you, and why every network learns the slow part first.
+n: 2
+minutes: 7
+---
+
+import LessonRace from '../../components/lesson/LessonRace.svelte';
+import { url as siteUrl } from '../../lib/url.ts';
+
+More neurons means more ways to bend a curve. So a bigger network should always fit better, right? Let us test that, and watch the order in which networks learn.
+
+## The setup
+
+The target is a sum of three waves, `sin(x) + 0.5 sin(2x) + (1/3) sin(3x)`, from −10 to 10, with a little noise. Three ReLU networks with two hidden layers race on it. They differ only in width: 10, 100 and 1,000 neurons per layer. Same data, same starting seed, same optimizer (Adam), 1,600 epochs.
+
+The widest network has a million parameters, about a hundred times more than the middle one. Training it takes hours on a typical processor, so the race below is a recording made on a graphics card. In the playground you can train it yourself.
+
+## Predict first
+
+<LessonRace
+  client:only="svelte"
+  preset="race-width"
+  question="After 1,600 epochs, which network ends closest to the true function inside the data?"
+  speed={8}
+/>
+
+## Ten is not enough
+
+With ten neurons per layer, the network has only a few bends to spend. It puts them where they cut the error most and draws straight lines everywhere else. Look at its left end: a whole wave is missing, replaced by a single slope.
+
+## A thousand is not better here
+
+The 1,000-wide network fits well, but it does not beat the 100-wide one in 1,600 epochs. It is still catching up when the race ends, after doing a hundred times more work per epoch. Width helps until the network has enough bends for the target. After that, more width mostly costs time.
+
+## Slow waves first
+
+Scrub back to the first few hundred epochs and compare each network with the dotted true function. The slow wave takes shape first, the middle one follows, and the fastest wiggles come last. The order is the same in all three networks, whatever their size. Gradient descent fits the smooth, low-frequency parts of a function first and the sharp, high-frequency details last. This is called **spectral bias**, and it is one reason networks generalize as well as they do: before they can memorize noise, they find the simple shape.
+
+> Networks learn the broad strokes first. Fine detail comes last, if it comes at all.
+
+## What about depth?
+
+Width is one way to grow a network. Depth is another. Race one layer of 256 neurons against two layers of 32 and three layers of 16. The deep, thin network has the fewest parameters of the three, yet it usually ends closest to the target: stacking layers lets bends multiply instead of adding up.
+
+<LessonRace
+  client:only="svelte"
+  preset="race-depth"
+  question="Three networks of about the same size, from one wide layer to three thin ones. Which fits the waves best?"
+  speed={16}
+/>
+
+## Try it yourself
+
+<a href={siteUrl('playground/#preset=race-width')}>Open the width race in the playground</a> and
+press Train it yourself, or change the widths and watch the estimate. Then try a target with a sharp
+corner, like `abs(x)`, and see which detail every network learns last.

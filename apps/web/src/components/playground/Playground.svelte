@@ -131,6 +131,21 @@
   );
   const slow = $derived(pg.clock === 0 && pg.status !== 'running' && pg.estimateTotal > 600);
   const layouts = ['overlay', 'stacked'] as const;
+  // Round epoch counts on a roughly logarithmic scale (the number field takes any value).
+  const EPOCH_STEPS = [
+    50, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 4000, 5000, 7500, 10000, 15000,
+    20000, 30000, 50000, 75000, 100000,
+  ];
+  const epochStep = $derived.by(() => {
+    let best = 0;
+    for (let k = 1; k < EPOCH_STEPS.length; k++)
+      if (
+        Math.abs(Math.log(EPOCH_STEPS[k] / pg.epochs)) <
+        Math.abs(Math.log(EPOCH_STEPS[best] / pg.epochs))
+      )
+        best = k;
+    return best;
+  });
   const stacked = $derived(pg.layout === 'stacked' && pg.visibleRuns.length > 1);
 </script>
 
@@ -182,20 +197,35 @@
             {:else if s.id === 'model'}
               <ModelPanel {pg} />
             {:else}
-              <label class="flex flex-col gap-1">
-                <span class="xp-label">{t('pg.epochs')}</span>
-                <input
-                  class="xp-input font-mono"
-                  type="number"
-                  min="1"
-                  max="100000"
-                  value={pg.epochs}
-                  onchange={(e) => {
-                    const v = Math.round(Number(e.currentTarget.value));
-                    if (v >= 1 && v <= 100000) pg.epochs = v;
-                  }}
-                />
-              </label>
+              <div class="flex flex-col gap-1">
+                <label class="xp-label" for="epochs">{t('pg.epochs')}</label>
+                <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2.5">
+                  <input
+                    id="epochs"
+                    class="xp-input font-mono"
+                    type="number"
+                    min="1"
+                    max="100000"
+                    value={pg.epochs}
+                    onchange={(e) => {
+                      const v = Math.round(Number(e.currentTarget.value));
+                      if (v >= 1 && v <= 100000) pg.epochs = v;
+                      else e.currentTarget.value = String(pg.epochs);
+                    }}
+                  />
+                  <input
+                    type="range"
+                    class="h-10 w-full accent-[var(--xp-accent)]"
+                    min="0"
+                    max={EPOCH_STEPS.length - 1}
+                    step="1"
+                    value={epochStep}
+                    aria-label={t('pg.epochs.slider')}
+                    aria-valuetext={pg.epochs.toLocaleString('en')}
+                    oninput={(e) => (pg.epochs = EPOCH_STEPS[Number(e.currentTarget.value)])}
+                  />
+                </div>
+              </div>
             {/if}
           </div>
         </section>

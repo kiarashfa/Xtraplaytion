@@ -61,6 +61,9 @@ describe.each(targets)('$name', (target) => {
     await page.goto('./playground/');
     await page.getByRole('textbox', { name: 'f(x) =' }).fill('exp(-x^2) cos(5x)');
     await showTab(page, 'Models');
+    // the editor starts closed
+    expect(await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Edit N1' }).click();
     await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).fill('17');
     await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).press('Tab');
     await page.getByRole('button', { name: /Share/ }).click();
@@ -72,6 +75,7 @@ describe.each(targets)('$name', (target) => {
       .poll(() => fresh.getByRole('textbox', { name: 'f(x) =' }).inputValue())
       .toBe('exp(-x^2) cos(5x)');
     await showTab(fresh, 'Models');
+    await fresh.getByRole('button', { name: 'Edit N1' }).click();
     expect(await fresh.getByRole('spinbutton', { name: 'Neurons in layer 1' }).inputValue()).toBe(
       '17',
     );
@@ -117,6 +121,39 @@ describe.each(targets)('$name', (target) => {
     await context.close();
   });
 
+  test('adds a model to the race', async () => {
+    const { context, page } = await openPage(browser, target, baseURL);
+    await page.goto('./playground/', { waitUntil: 'networkidle' });
+    await showTab(page, 'Models');
+    const rows = page.locator('table tbody tr');
+    await expect.poll(() => rows.count()).toBe(1);
+    await page.getByRole('button', { name: 'Add model' }).click();
+    await expect.poll(() => rows.count()).toBe(2);
+    // adding opens the settings of the new model, and only those
+    expect(await page.getByRole('button', { name: 'Edit N2' }).getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+    expect(await page.getByRole('button', { name: 'Edit N1' }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+    await page.getByRole('button', { name: 'Edit N2' }).click();
+    expect(await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).count()).toBe(0);
+    await context.close();
+  });
+
+  test('epochs: slider steps and exact numbers', async () => {
+    const { context, page } = await openPage(browser, target, baseURL);
+    await page.goto('./playground/', { waitUntil: 'networkidle' });
+    await showTab(page, 'Train');
+    const field = page.getByRole('spinbutton', { name: 'Epochs' });
+    await page.getByRole('slider', { name: 'Epochs (slider)' }).fill('8');
+    expect(await field.inputValue()).toBe('1000');
+    await field.fill('1234');
+    await field.press('Tab');
+    expect(await page.locator('[data-epoch]').textContent()).toContain('1,234');
+    await context.close();
+  });
+
   test('version 1 links still open', async () => {
     const { context, page } = await openPage(browser, target, baseURL);
     await page.goto('./playground/');
@@ -151,6 +188,7 @@ describe.each(targets)('$name', (target) => {
     await page.reload();
     await expect.poll(() => page.getByRole('textbox', { name: 'f(x) =' }).inputValue()).toBe('x^2');
     await showTab(page, 'Models');
+    await page.getByRole('button', { name: 'Edit N1' }).click();
     expect(await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).inputValue()).toBe(
       '23',
     );

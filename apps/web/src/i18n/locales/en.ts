@@ -121,8 +121,10 @@ const en = {
   'pg.models.show': 'Show {name}',
   'pg.models.hide': 'Hide {name}',
   'pg.models.remove': 'Remove {name}',
-  'pg.models.duplicate': 'Duplicate {name}',
-  'pg.models.editing': 'Editing {name}',
+  'pg.models.add': 'Add model',
+  'pg.models.addHint':
+    'A new model starts as a copy of {name} with different starting weights, so you can change one thing and compare.',
+  'pg.models.full': 'A race has at most {max} models. Remove one to add another.',
   'pg.models.seed': 'Weight seed',
   'pg.models.newSeed': 'New starting weights',
   'pg.models.eta': '~{time}',
@@ -130,6 +132,7 @@ const en = {
   'pg.models.workers':
     '{count, plural, one {One model trains} other {# models train}} at a time on this device. The others wait their turn and replay in step.',
   'pg.epochs': 'Epochs',
+  'pg.epochs.slider': 'Epochs (slider)',
   'pg.run.play': 'Play',
   'pg.run.pause': 'Pause',
   'pg.run.step': 'One epoch',

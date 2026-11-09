@@ -39,6 +39,23 @@ export default defineConfig({
         '@fontsource-variable/inter': 'Inter font (packaged by Fontsource)',
         '@fontsource/jetbrains-mono': 'JetBrains Mono font (packaged by Fontsource)',
       },
+      // Algorithms ported into packages/dmath.
+      extras: [
+        {
+          name: 'fdlibm',
+          label: 'fdlibm math library (ported in packages/dmath)',
+          license: 'fdlibm notice',
+          homepage: 'https://www.netlib.org/fdlibm/',
+          text: 'Copyright (C) 1993-2004 by Sun Microsystems, Inc. All rights reserved.\n\nDeveloped at SunPro, a Sun Microsystems, Inc. business.\nPermission to use, copy, modify, and distribute this\nsoftware is freely granted, provided that this notice\nis preserved.',
+        },
+        {
+          name: 'musl',
+          label: 'musl libc math routines (argument reduction, ported in packages/dmath)',
+          license: 'MIT',
+          homepage: 'https://musl.libc.org',
+          text: 'Copyright © 2005-2020 Rich Felker, et al.\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n"Software"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.',
+        },
+      ],
     }),
   ],
   devToolbar: { enabled: false },

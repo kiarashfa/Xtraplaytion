@@ -1,0 +1,19 @@
+{
+  "name": "@xtraplaytion/expr",
+  "private": true,
+  "type": "module",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@xtraplaytion/dmath": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "4.10.2"
+  }
+}

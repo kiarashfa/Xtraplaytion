@@ -38,9 +38,13 @@ jobs:
 
       # Google Chrome ships with the runner; Firefox and WebKit are installed for CI only.
       - name: Install Firefox and WebKit
-        run: pnpm --filter @xtraplaytion/web exec playwright-core install --with-deps firefox webkit
+        run: pnpm --filter @xtraplaytion/dmath exec playwright-core install --with-deps firefox webkit
       - name: Browser tests
         run: pnpm test:e2e
+        env:
+          XP_BROWSERS: chrome,firefox,webkit
+      - name: Identical math in every engine
+        run: pnpm test:engines
         env:
           XP_BROWSERS: chrome,firefox,webkit
 

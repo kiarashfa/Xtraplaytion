@@ -74,4 +74,10 @@ export default defineConfig(
       'no-restricted-properties': ['error', ...nonDeterministicMath],
     },
   },
+  {
+    // fdlibm's constants are kept in their published 21-digit spelling; tests prove each
+    // rounds to the intended double (bit-identical results against V8).
+    files: ['packages/dmath/src/**/*.ts'],
+    rules: { 'no-loss-of-precision': 'off' },
+  },
 );

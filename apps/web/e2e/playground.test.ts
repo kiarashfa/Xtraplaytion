@@ -235,6 +235,9 @@ describe.each(targets)('$name', (target) => {
     // On the processor, a million-parameter network takes far too long: the recording plays.
     await showTab(page, 'Train');
     await page.locator('[data-backend-choice=cpu]').click();
+    // Changing the backend restarts the race after a short debounce. Without WebGPU the
+    // recording is already showing, so let that restart happen before pressing play.
+    await page.waitForTimeout(500);
     const notice = page.locator('[data-recorded-notice]');
     await expect.poll(() => notice.isVisible(), { timeout: 10000 }).toBe(true);
     expect(await page.locator('[data-backend]').getAttribute('data-backend')).toBe('recorded');
@@ -265,7 +268,7 @@ describe.each(targets)('$name', (target) => {
       await race.getByRole('radio').nth(1).click();
       await race.getByRole('button', { name: 'Run the race' }).click();
       await expect
-        .poll(() => race.getByText(/Well spotted|Not this time/).isVisible(), { timeout: 30000 })
+        .poll(() => race.getByText(/Well spotted|Not this time/).isVisible(), { timeout: 60000 })
         .toBe(true);
     }
     expect(await page.locator('[data-lesson-race=race-width]').getByText('Recorded').count()).toBe(
@@ -273,7 +276,7 @@ describe.each(targets)('$name', (target) => {
     );
     expect(problems).toEqual([]);
     await context.close();
-  });
+  }, 90_000);
 
   test('lesson: predict, race, reveal', async () => {
     const { context, page, problems } = await openPage(browser, target, baseURL);

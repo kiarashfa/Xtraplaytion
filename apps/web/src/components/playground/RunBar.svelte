@@ -1,5 +1,6 @@
 <script lang="ts">
   import { useTranslations } from '../../i18n';
+  import { formatDuration } from '../../lib/capability.ts';
   import type { Playground } from '../../lib/playground.svelte.ts';
   import Icon from '../Icon.svelte';
 
@@ -12,10 +13,20 @@
   const speeds = [1, 2, 4, 8, 16, 32, 64, 128];
   const speedIndex = $derived(Math.max(0, speeds.indexOf(pg.speed)));
   const running = $derived(pg.status === 'running');
+  const active = $derived(pg.runs.filter((r) => r.status !== 'queued' && !r.finished));
+  // The race moves at the pace of its slowest model.
+  const rate = $derived(
+    active.length && active.every((r) => r.epochsPerSec > 0)
+      ? Math.min(...active.map((r) => r.epochsPerSec))
+      : 0,
+  );
+  const started = $derived(pg.clock > 0 || running);
   const left = $derived.by(() => {
-    if (!running || pg.epochsPerSec <= 0) return '-';
-    const s = (pg.epochs - pg.epoch) / pg.epochsPerSec;
-    return s < 60 ? `${Math.ceil(s)} s` : `${Math.floor(s / 60)} min ${Math.ceil(s % 60)} s`;
+    if (!started) return formatDuration(pg.estimateTotal);
+    if (!running || rate <= 0) return '-';
+    const waiting = pg.runs.filter((r) => r.status === 'queued').length;
+    const rounds = 1 + Math.ceil(waiting / pg.maxWorkers);
+    return formatDuration(((pg.epochs - pg.clock) / rate) * rounds);
   });
   const nf = new Intl.NumberFormat('en');
 </script>
@@ -35,7 +46,7 @@
     class="grid size-11 place-items-center rounded-lg text-muted hover:text-ink disabled:opacity-40"
     aria-label={t('pg.run.step')}
     title={t('pg.run.step')}
-    disabled={!pg.data || pg.epoch >= pg.epochs}
+    disabled={!pg.data || pg.status === 'done' || pg.status === 'diverged'}
     onclick={() => pg.step()}
   >
     <Icon name="step" />
@@ -50,12 +61,14 @@
     <Icon name="reset" />
   </button>
   <div class="min-w-36 flex-1 {compact ? '' : 'sm:max-w-56'}">
-    <p class="font-mono text-[15px] font-semibold">
-      <span class="sr-only">{t('pg.run.epoch')}</span>{nf.format(pg.epoch)}
+    <p class="font-mono text-[15px] font-semibold" data-epoch>
+      <span class="sr-only">{t('pg.run.epoch')}</span>{nf.format(pg.viewEpoch)}
       <span class="font-normal text-faint">/ {nf.format(pg.epochs)}</span>
     </p>
     <div class="mt-1 h-1 overflow-hidden rounded bg-line" aria-hidden="true">
-      <i class="block h-full bg-accent" style:width="{Math.min(100, (100 * pg.epoch) / pg.epochs)}%"
+      <i
+        class="block h-full bg-accent"
+        style:width="{Math.min(100, (100 * pg.viewEpoch) / pg.epochs)}%"
       ></i>
     </div>
   </div>
@@ -78,11 +91,13 @@
     </label>
     <p class="flex flex-col text-xs leading-tight text-muted">
       {t('pg.run.rate')}<b class="font-mono text-[13px] text-ink"
-        >{pg.epochsPerSec ? t('pg.run.rateValue', { n: Math.round(pg.epochsPerSec) }) : '-'}</b
+        >{rate ? t('pg.run.rateValue', { n: Math.round(rate) }) : '-'}</b
       >
     </p>
     <p class="flex flex-col text-xs leading-tight text-muted">
-      {t('pg.run.left')}<b class="font-mono text-[13px] text-ink">{left}</b>
+      {started ? t('pg.run.left') : t('pg.run.estimate')}<b class="font-mono text-[13px] text-ink"
+        >{left}</b
+      >
     </p>
   {/if}
   <div class="ms-auto flex items-center gap-2">

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useTranslations } from '../../i18n';
-  import type { Playground } from '../../lib/playground.svelte.ts';
+  import type { ModelRun, Playground } from '../../lib/playground.svelte.ts';
   import {
     autoYDomain,
     drawFit,
@@ -11,8 +11,22 @@
     type SceneTheme,
   } from '../../lib/scene/draw.ts';
   import { prepare, watchSize, watchTheme } from './canvas.ts';
+  import { COLOR_CLASS } from './Swatch.svelte';
 
-  const { pg, compact = false }: { pg: Playground; compact?: boolean } = $props();
+  const {
+    pg,
+    runs,
+    compact = false,
+    short = false,
+    tag,
+  }: {
+    pg: Playground;
+    /** The models drawn in this plot (all visible ones, or one when stacked). */
+    runs: ModelRun[];
+    compact?: boolean;
+    short?: boolean;
+    tag?: string;
+  } = $props();
   const t = useTranslations();
 
   let canvas = $state<HTMLCanvasElement>();
@@ -26,6 +40,14 @@
     pg.data
       ? autoYDomain(pg.data.clean, pg.data.trainY, pg.data.valY)
       : ([-1, 1] as [number, number]),
+  );
+
+  // Every model is shown at the same epoch (the shared clock, or the replay position).
+  const shown = $derived(
+    runs.flatMap((run) => {
+      const frame = run.frameAt(pg.viewEpoch);
+      return frame ? [{ run, frame }] : [];
+    }),
   );
 
   function scene(w: number, h: number): FitScene | null {
@@ -43,7 +65,7 @@
       valY: d.valY,
       gridX: d.gridX,
       truth: d.clean,
-      models: pg.grid ? [{ ys: pg.grid, color: 1 }] : [],
+      models: shown.map(({ run, frame }) => ({ ys: frame.grid, color: run.spec.color })),
       regionLabels: {
         train: t('pg.region.train'),
         gap: t('pg.region.gap'),
@@ -53,6 +75,7 @@
       activeEdge: drag?.edge ?? null,
       crosshairX: hoverX,
       compact,
+      ...(tag ? { tags: { left: tag } } : {}),
     };
   }
 
@@ -141,16 +164,23 @@
     return {
       x: d.gridX[i],
       truth: d.clean[i],
-      model: pg.grid ? pg.grid[i] : NaN,
+      models: shown.map(({ run, frame }) => ({ color: run.spec.color, y: frame.grid[i] })),
       left,
       flip: left > canvas.clientWidth - 180,
     };
   });
 
+  const num = (v: number) => (Number.isFinite(v) ? v.toFixed(3) : '-');
   const summary = $derived(
-    pg.metrics
-      ? `${t('pg.score.inside')} ${pg.metrics.inside.toFixed(3)}, ${t('pg.score.beyond')} ${Number.isFinite(pg.metrics.beyond) ? pg.metrics.beyond.toFixed(3) : '-'}.`
-      : '',
+    shown
+      .map(({ run, frame }) =>
+        t('pg.plot.model', {
+          name: `N${run.spec.color}`,
+          inside: num(frame.metrics.inside),
+          beyond: num(frame.metrics.beyond),
+        }),
+      )
+      .join(' '),
   );
   const fmt = (v: number) => (Number.isFinite(v) ? v.toFixed(2).replace('-', '−') : '-');
 </script>
@@ -158,7 +188,11 @@
 <div class="relative" role="img" aria-label={t('pg.plot.label', { summary })}>
   <canvas
     bind:this={canvas}
-    class="block w-full touch-pan-y {compact ? 'h-[300px]' : 'h-[clamp(300px,46vh,460px)]'}"
+    class="block w-full touch-pan-y {short
+      ? 'h-[210px]'
+      : compact
+        ? 'h-[300px]'
+        : 'h-[clamp(300px,46vh,460px)]'}"
     aria-hidden="true"
     onpointerdown={onDown}
     onpointermove={onMove}
@@ -175,9 +209,13 @@
       <p class="mt-1 flex justify-between">
         <span>{t('pg.tooltip.truth')}</span><span class="font-mono">{fmt(hoverInfo.truth)}</span>
       </p>
-      <p class="flex justify-between">
-        <span class="text-c1">N1</span><span class="font-mono">{fmt(hoverInfo.model)}</span>
-      </p>
+      {#each hoverInfo.models as m (m.color)}
+        <p class="flex justify-between">
+          <span class="font-semibold {COLOR_CLASS[(m.color - 1) % 6]}">N{m.color}</span><span
+            class="font-mono">{fmt(m.y)}</span
+          >
+        </p>
+      {/each}
     </div>
   {/if}
 </div>

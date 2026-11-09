@@ -2,23 +2,40 @@
 // The fragment never reaches a server. Decoding validates everything and caps sizes.
 import type { Activation, LossKind, MLPConfig, Noise, OptimizerKind } from '@xtraplaytion/engine';
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 const MAX_DECODED = 64 * 1024;
 
+export interface SharedModel {
+  model: MLPConfig;
+  /** Seed for this model's initial weights (the data has its own seed). */
+  seed: number;
+  visible: boolean;
+}
+
+/** Version 2: several competitors. Version 1 links (one model) are migrated on load. */
 export interface ExperimentState {
-  v: 1;
+  v: 2;
   expr: string;
   domain: [number, number];
   n: number;
   noise: Noise;
+  /** Seed of the data (noise and validation split). */
   seed: number;
   valFraction: number;
   bands: [number, number][];
-  model: MLPConfig;
+  models: SharedModel[];
   epochs: number;
+  layout: 'overlay' | 'stacked';
 }
 
-export const LIMITS = { layers: 8, width: 1024, n: 5000, epochs: 100_000, exprLength: 1000 };
+export const LIMITS = {
+  layers: 8,
+  width: 1024,
+  n: 5000,
+  epochs: 100_000,
+  exprLength: 1000,
+  models: 6,
+};
 
 const ACTS: Activation[] = [
   'relu',
@@ -100,7 +117,7 @@ export function validateState(o: unknown): ExperimentState | null {
   if (!o || typeof o !== 'object') return null;
   const s = o as Record<string, unknown>;
   if (
-    s['v'] !== STATE_VERSION ||
+    (s['v'] !== 1 && s['v'] !== STATE_VERSION) ||
     typeof s['expr'] !== 'string' ||
     s['expr'].length > LIMITS.exprLength
   )
@@ -127,19 +144,42 @@ export function validateState(o: unknown): ExperimentState | null {
     if (hi > lo) bands.push([lo, hi]);
   }
   const noise = validNoise(s['noise']);
-  const model = validModel(s['model']);
-  if (!noise || !model) return null;
+  if (!noise) return null;
+  const seed = Math.round(clamp(s['seed'], 0, 2 ** 31 - 1));
+  let models: SharedModel[];
+  if (s['v'] === 1) {
+    // v1: one model whose weights used the data seed. Keep that, so old links replay exactly.
+    const model = validModel(s['model']);
+    if (!model) return null;
+    models = [{ model, seed, visible: true }];
+  } else {
+    const list = s['models'];
+    if (!Array.isArray(list) || list.length < 1 || list.length > LIMITS.models) return null;
+    models = [];
+    for (const m of list) {
+      if (!m || typeof m !== 'object') return null;
+      const r = m as Record<string, unknown>;
+      const model = validModel(r['model']);
+      if (!model || !isNum(r['seed'])) return null;
+      models.push({
+        model,
+        seed: Math.round(clamp(r['seed'], 0, 2 ** 31 - 1)),
+        visible: r['visible'] !== false,
+      });
+    }
+  }
   return {
-    v: 1,
+    v: 2,
     expr: s['expr'],
     domain,
     n: Math.round(clamp(s['n'], 2, LIMITS.n)),
     noise,
-    seed: Math.round(clamp(s['seed'], 0, 2 ** 31 - 1)),
+    seed,
     valFraction: clamp(s['valFraction'], 0, 0.5),
     bands,
-    model,
+    models,
     epochs: Math.round(clamp(s['epochs'], 1, LIMITS.epochs)),
+    layout: s['layout'] === 'stacked' ? 'stacked' : 'overlay',
   };
 }
 

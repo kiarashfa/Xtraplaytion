@@ -12,6 +12,9 @@ export interface Preset {
   hidden: number[];
   act: Activation;
   lr: number;
+  /** Suggested competitors (a race). Without it the preset trains one model. */
+  models?: { hidden: number[]; act: Activation; lr?: number }[];
+  layout?: 'overlay' | 'stacked';
 }
 
 const p = (
@@ -34,6 +37,52 @@ const p = (
 });
 
 export const PRESETS: Preset[] = [
+  // Races, after the reference animations.
+  p('race-width', 'sin(x) + 0.5 sin(2x) + (1/3) sin(3x)', [-10, 10], {
+    sigma: 0.03,
+    epochs: 1600,
+    models: [
+      { hidden: [10, 10], act: 'relu' },
+      { hidden: [40, 40], act: 'relu' },
+      { hidden: [100, 100], act: 'relu' },
+    ],
+    layout: 'stacked',
+  }),
+  p('race-activations', 'sin(3x)', [-3, 3], {
+    bands: [
+      [-3, -1],
+      [1, 3],
+    ],
+    epochs: 3000,
+    lr: 1e-2,
+    models: [
+      { hidden: [10, 10], act: 'relu' },
+      { hidden: [10, 10], act: 'tanh' },
+      { hidden: [10, 10], act: 'sin' },
+    ],
+    layout: 'stacked',
+  }),
+  p('race-shallow', 'sin(5x) + x', [-2, 2], {
+    sigma: 0.15,
+    n: 160,
+    epochs: 3000,
+    models: [
+      { hidden: [81], act: 'relu' },
+      { hidden: [161], act: 'relu' },
+      { hidden: [362], act: 'relu' },
+    ],
+  }),
+  p('race-noisy-parabola', 'x^2', [-3, 3], {
+    sigma: 0.6,
+    n: 120,
+    bands: [[-2.5, 2.5]],
+    epochs: 2500,
+    models: [
+      { hidden: [4], act: 'tanh' },
+      { hidden: [32, 32], act: 'tanh' },
+      { hidden: [128, 128, 128], act: 'relu' },
+    ],
+  }),
   p('waves', 'sin(x) + 0.5 sin(2x) + (1/3) sin(3x)', [-10, 10], {
     bands: [
       [-7.5, -2],

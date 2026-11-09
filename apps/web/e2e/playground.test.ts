@@ -6,7 +6,7 @@ const baseURL = inject('baseURL');
 
 /** Current epoch as shown in the run bar. */
 async function epochOf(page: Page): Promise<number> {
-  const text = (await page.locator('p.font-mono').first().textContent()) ?? '';
+  const text = (await page.locator('[data-epoch]').textContent()) ?? '';
   return Number(text.replace(/[^\d/]/g, '').split('/')[0]);
 }
 
@@ -60,7 +60,7 @@ describe.each(targets)('$name', (target) => {
     const { context, page } = await openPage(browser, target, baseURL);
     await page.goto('./playground/');
     await page.getByRole('textbox', { name: 'f(x) =' }).fill('exp(-x^2) cos(5x)');
-    await showTab(page, 'Model');
+    await showTab(page, 'Models');
     await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).fill('17');
     await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).press('Tab');
     await page.getByRole('button', { name: /Share/ }).click();
@@ -71,7 +71,7 @@ describe.each(targets)('$name', (target) => {
     await expect
       .poll(() => fresh.getByRole('textbox', { name: 'f(x) =' }).inputValue())
       .toBe('exp(-x^2) cos(5x)');
-    await showTab(fresh, 'Model');
+    await showTab(fresh, 'Models');
     expect(await fresh.getByRole('spinbutton', { name: 'Neurons in layer 1' }).inputValue()).toBe(
       '17',
     );
@@ -92,9 +92,75 @@ describe.each(targets)('$name', (target) => {
     await context.close();
   });
 
-  test('playground has no horizontal scroll', async () => {
+  test('races several models on one clock, and replay shows exactly what was shown live', async () => {
+    const { context, page, problems } = await openPage(browser, target, baseURL);
+    await page.goto('./playground/#preset=race-activations', { waitUntil: 'networkidle' });
+    const rows = page.locator('table tbody tr');
+    await expect.poll(() => rows.count()).toBe(3);
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => epochOf(page), { timeout: 20000 }).toBeGreaterThan(200);
+    await page.getByRole('button', { name: 'Pause' }).click();
+    await page.waitForTimeout(300);
+    const at = await epochOf(page);
+    const live = await rows.allTextContents();
+    expect(live.every((r) => /\d\.\d{3}/.test(r))).toBe(true);
+    // keep training, then rewind to the same epoch
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => epochOf(page), { timeout: 20000 }).toBeGreaterThan(at + 100);
+    await page.getByRole('slider', { name: 'Epoch shown' }).fill(String(at));
+    expect(await epochOf(page)).toBe(at);
+    expect(await rows.allTextContents()).toEqual(live);
+    expect(await page.getByRole('button', { name: 'Pause' }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Live' }).click();
+    expect(await epochOf(page)).toBeGreaterThan(at + 100);
+    expect(problems).toEqual([]);
+    await context.close();
+  });
+
+  test('version 1 links still open', async () => {
     const { context, page } = await openPage(browser, target, baseURL);
-    await page.goto('./playground/', { waitUntil: 'networkidle' });
+    await page.goto('./playground/');
+    const code = await page.evaluate(async () => {
+      const v1 = {
+        v: 1,
+        expr: 'x^2',
+        domain: [-2, 2],
+        n: 50,
+        noise: { kind: 'none' },
+        seed: 3,
+        valFraction: 0.2,
+        bands: [],
+        epochs: 500,
+        model: {
+          kind: 'mlp',
+          hidden: [23],
+          activations: ['tanh'],
+          optimizer: { kind: 'adam', lr: 0.01 },
+          loss: { kind: 'mse' },
+        },
+      };
+      const stream = new Blob([JSON.stringify(v1)])
+        .stream()
+        .pipeThrough(new CompressionStream('deflate-raw'));
+      const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+      let bin = '';
+      for (const b of bytes) bin += String.fromCharCode(b);
+      return btoa(bin).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+    });
+    await page.goto(`./playground/#s=${code}`);
+    await page.reload();
+    await expect.poll(() => page.getByRole('textbox', { name: 'f(x) =' }).inputValue()).toBe('x^2');
+    await showTab(page, 'Models');
+    expect(await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).inputValue()).toBe(
+      '23',
+    );
+    expect(await page.getByRole('spinbutton', { name: 'Weight seed' }).inputValue()).toBe('3');
+    await context.close();
+  });
+
+  test('playground has no horizontal scroll, even with stacked races', async () => {
+    const { context, page } = await openPage(browser, target, baseURL);
+    await page.goto('./playground/#preset=race-width', { waitUntil: 'networkidle' });
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );

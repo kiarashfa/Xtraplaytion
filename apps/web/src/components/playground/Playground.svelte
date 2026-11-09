@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { useTranslations } from '../../i18n';
+  import { cachedSpeed, formatDuration, measureSpeed } from '../../lib/capability.ts';
   import { Playground } from '../../lib/playground.svelte.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import { decodeState, encodeState } from '../../lib/share.ts';
@@ -9,9 +10,10 @@
   import DataPanel from './DataPanel.svelte';
   import FitPlot from './FitPlot.svelte';
   import LossPlot from './LossPlot.svelte';
+  import Leaderboard from './Leaderboard.svelte';
   import ModelPanel from './ModelPanel.svelte';
   import RunBar from './RunBar.svelte';
-  import Scoreboard from './Scoreboard.svelte';
+  import Scrubber from './Scrubber.svelte';
   import Swatch from './Swatch.svelte';
   import TargetPanel from './TargetPanel.svelte';
 
@@ -42,20 +44,38 @@
     const onMq = () => (mobile = mq.matches);
     mq.addEventListener('change', onMq);
 
-    const params = new URLSearchParams(location.hash.slice(1));
-    const hash = params.get('s');
-    const preset = PRESETS.find((p) => p.id === params.get('preset'));
-    if (preset) pg.applyPreset(preset);
-    (async () => {
-      if (hash) {
-        const s = await decodeState(hash);
+    // #preset=... or #s=... (also when a link is pasted into an open playground)
+    const fromHash = async () => {
+      const params = new URLSearchParams(location.hash.slice(1));
+      const code = params.get('s');
+      const preset = PRESETS.find((p) => p.id === params.get('preset'));
+      if (preset) pg.applyPreset(preset);
+      if (code) {
+        const s = await decodeState(code);
         if (s) {
           pg.loadState(s);
           say(t('pg.share.loaded'));
         } else say(t('pg.share.bad'));
       }
-      loaded = true;
-    })();
+    };
+    fromHash().then(() => (loaded = true));
+    const onHash = () => void fromHash();
+    addEventListener('hashchange', onHash);
+
+    // Device speed for time estimates: cached, or measured once the page has settled.
+    const cached = cachedSpeed();
+    let benchTimer = 0;
+    if (cached) {
+      pg.deviceSpeed = cached;
+      pg.deviceMeasured = true;
+    } else {
+      benchTimer = window.setTimeout(() => {
+        measureSpeed().then((v) => {
+          pg.deviceSpeed = v;
+          pg.deviceMeasured = true;
+        });
+      }, 1200);
+    }
 
     const onVis = () => {
       if (document.hidden && pg.status === 'running') {
@@ -67,16 +87,17 @@
     return () => {
       mq.removeEventListener('change', onMq);
       document.removeEventListener('visibilitychange', onVis);
-      pg.trainer.dispose();
+      removeEventListener('hashchange', onHash);
+      clearTimeout(benchTimer);
+      pg.dispose();
     };
   });
 
-  // Any change to the data or the model starts a fresh run from the same seed.
+  // Any change to the data or a model starts a fresh race from the same seeds.
   $effect(() => {
     if (!loaded) return;
     void pg.data;
-    void pg.config;
-    void pg.epochs;
+    void pg.trainingKey;
     const id = setTimeout(() => pg.restart(), 120);
     return () => clearTimeout(id);
   });
@@ -92,16 +113,25 @@
     }
   }
 
-  const lossStr = $derived(Number.isFinite(pg.trainLossNow) ? pg.trainLossNow.toPrecision(3) : '-');
+  const diverged = $derived(
+    pg.runs
+      .filter((r) => r.status === 'diverged')
+      .map((r) => `N${r.spec.color}`)
+      .join(', '),
+  );
+  const failure = $derived(pg.runs.find((r) => r.status === 'error')?.errorMessage ?? '');
   // Announced to screen readers on status changes (not every frame).
   const statusText = $derived(
     t(`pg.status.${pg.status}`, {
-      epoch: pg.epoch,
+      epoch: pg.viewEpoch,
       total: pg.epochs,
-      loss: lossStr,
-      message: pg.errorMessage,
+      names: diverged,
+      message: failure,
     }),
   );
+  const slow = $derived(pg.clock === 0 && pg.status !== 'running' && pg.estimateTotal > 600);
+  const layouts = ['overlay', 'stacked'] as const;
+  const stacked = $derived(pg.layout === 'stacked' && pg.visibleRuns.length > 1);
 </script>
 
 <div
@@ -176,12 +206,18 @@
   <div class="order-1 flex min-w-0 flex-col gap-3 p-2.5 sm:p-3.5 md:order-2">
     <RunBar {pg} onshare={share} compact={mobile} />
 
-    {#if pg.status === 'diverged' || pg.status === 'error' || pg.pausedByHiddenTab}
+    {#if diverged || failure || pg.pausedByHiddenTab || slow}
       <p
         class="flex items-center gap-2 rounded-xl border border-line bg-accent-soft px-3 py-2 text-sm"
         role="status"
       >
-        <Icon name="info" />{pg.pausedByHiddenTab ? t('pg.status.hidden') : statusText}
+        <Icon name="info" />{pg.pausedByHiddenTab
+          ? t('pg.status.hidden')
+          : failure
+            ? t('pg.status.error', { message: failure })
+            : diverged
+              ? t('pg.status.diverged', { names: diverged })
+              : t('pg.run.slow', { time: formatDuration(pg.estimateTotal) })}
       </p>
     {/if}
 
@@ -204,14 +240,45 @@
               'pg.legend.truth',
             )}
           </li>
-          <li
-            class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
-          >
-            <Swatch color={1} width={20} />N1
-          </li>
+          {#each pg.models.filter((m) => m.visible) as m (m.id)}
+            <li
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
+            >
+              <Swatch color={m.color} width={20} />N{m.color}
+            </li>
+          {/each}
         </ul>
+        {#if pg.models.length > 1}
+          <div
+            class="flex rounded-lg border border-line bg-surface-2 p-0.5 text-[12.5px]"
+            role="group"
+            aria-label={t('pg.layout')}
+          >
+            {#each layouts as l (l)}
+              <button
+                type="button"
+                class="h-7 rounded-md px-2.5 font-semibold {pg.layout === l
+                  ? 'bg-surface text-ink shadow-sm'
+                  : 'text-muted hover:text-ink'}"
+                aria-pressed={pg.layout === l}
+                onclick={() => (pg.layout = l)}>{t(`pg.layout.${l}`)}</button
+              >
+            {/each}
+          </div>
+        {/if}
       </div>
-      <div class="px-1.5 pt-1 pb-2 sm:px-2"><FitPlot {pg} compact={mobile} /></div>
+      {#if stacked}
+        <div class="flex flex-col gap-1 px-1.5 pt-1 pb-2 sm:px-2">
+          {#each pg.visibleRuns as r (r.spec.id)}
+            <FitPlot {pg} runs={[r]} compact={mobile} short tag={`N${r.spec.color}`} />
+          {/each}
+        </div>
+      {:else}
+        <div class="px-1.5 pt-1 pb-2 sm:px-2">
+          <FitPlot {pg} runs={pg.visibleRuns} compact={mobile} />
+        </div>
+      {/if}
+      <Scrubber {pg} />
       <p class="px-3.5 pb-3 text-xs text-muted">{t('pg.plot.hint')}</p>
     </section>
 
@@ -228,7 +295,7 @@
           <h2 id="score-title" class="text-sm font-bold">{t('pg.score')}</h2>
           <span class="text-xs text-faint">{t('pg.score.legend')}</span>
         </div>
-        <div class="p-1.5"><Scoreboard {pg} /></div>
+        <div class="p-1.5"><Leaderboard {pg} /></div>
       </section>
     </div>
     <p class="sr-only" aria-live="polite">{statusText}</p>

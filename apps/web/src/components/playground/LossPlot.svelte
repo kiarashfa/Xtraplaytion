@@ -20,7 +20,9 @@
 
   $effect(() => {
     void size;
-    void pg.lossVersion;
+    const upTo = pg.viewEpoch;
+    const runs = pg.visibleRuns;
+    for (const r of runs) void r.version;
     if (!canvas || !theme) return;
     const { ctx, w, h } = prepare(canvas);
     if (!ctx) return;
@@ -31,7 +33,12 @@
         height: h,
         epochs: pg.epochs,
         compact,
-        series: [{ train: pg.trainer.trainLoss.view(), val: pg.trainer.valLoss.view(), color: 1 }],
+        // Losses up to the epoch shown, so a replay rewinds the loss curves too.
+        series: runs.map((r) => ({
+          train: r.trainer.trainLoss.view().subarray(0, upTo),
+          val: r.trainer.valLoss.view().subarray(0, upTo),
+          color: r.spec.color,
+        })),
       },
       theme,
     );

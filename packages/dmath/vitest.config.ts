@@ -4,7 +4,13 @@ export default defineConfig({
   test: {
     projects: [
       {
-        test: { name: 'unit', environment: 'node', include: ['test/**/*.test.ts'] },
+        // The accuracy suite compares against arbitrary-precision references: slow machines need time.
+        test: {
+          name: 'unit',
+          environment: 'node',
+          include: ['test/**/*.test.ts'],
+          testTimeout: 60_000,
+        },
       },
       {
         // Same vectors in real browsers (XP_BROWSERS, default: the installed Chrome).

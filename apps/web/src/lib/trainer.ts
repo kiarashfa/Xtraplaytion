@@ -17,6 +17,12 @@ export interface StartOptions {
   epochsPerFrame: number;
 }
 
+export interface TrainerOptions {
+  /** Acknowledge frames automatically on the next animation frame (default true).
+   *  The arena turns this off to keep several models on one shared epoch clock. */
+  autoAck?: boolean;
+}
+
 /** Growable float64 series (loss history). */
 export class Series {
   data = new Float64Array(1024);
@@ -44,9 +50,11 @@ export class Trainer {
   private worker: Worker | null = null;
   private runId = 0;
   private readonly events: TrainerEvents;
+  private readonly autoAck: boolean;
 
-  constructor(events: TrainerEvents) {
+  constructor(events: TrainerEvents, options: TrainerOptions = {}) {
     this.events = events;
+    this.autoAck = options.autoAck ?? true;
   }
 
   start(opts: StartOptions) {
@@ -75,7 +83,7 @@ export class Trainer {
         this.trainLoss.push(m.newTrainLoss);
         this.valLoss.push(m.newValLoss);
         this.events.frame?.(m);
-        requestAnimationFrame(() => this.post({ type: 'ack', seq: m.seq }));
+        if (this.autoAck) requestAnimationFrame(() => this.post({ type: 'ack', seq: m.seq }));
         break;
       case 'done':
         this.events.done?.(m.reason, m.epoch);
@@ -90,6 +98,13 @@ export class Trainer {
     this.worker?.postMessage(m);
   }
 
+  /** Let the worker send more frames (manual mode). */
+  ack(seq: number) {
+    this.post({ type: 'ack', seq });
+  }
+  get started(): boolean {
+    return this.worker !== null;
+  }
   play() {
     this.post({ type: 'play' });
   }

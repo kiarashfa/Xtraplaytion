@@ -261,6 +261,16 @@ importers:
         specifier: 1.64.1
         version: 1.64.1
 
+  packages/engine:
+    dependencies:
+      '@xtraplaytion/dmath':
+        specifier: workspace:*
+        version: link:../dmath
+    devDependencies:
+      playwright-core:
+        specifier: 1.64.1
+        version: 1.64.1
+
   packages/expr:
     dependencies:
       '@xtraplaytion/dmath':

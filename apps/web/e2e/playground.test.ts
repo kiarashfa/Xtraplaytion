@@ -241,8 +241,12 @@ describe.each(targets)('$name', (target) => {
     const notice = page.locator('[data-recorded-notice]');
     await expect.poll(() => notice.isVisible(), { timeout: 10000 }).toBe(true);
     expect(await page.locator('[data-backend]').getAttribute('data-backend')).toBe('recorded');
+    // Playback moves a fixed number of epochs per animation frame; CI browsers draw few
+    // frames per second, so play at the top speed where the slider is shown.
+    const speedSlider = page.locator('label:has-text("Speed") input[type=range]');
+    if (await speedSlider.isVisible()) await speedSlider.fill('7');
     await page.getByRole('button', { name: 'Play' }).click();
-    await expect.poll(() => epochOf(page), { timeout: 20000 }).toBe(1600);
+    await expect.poll(() => epochOf(page), { timeout: 45000 }).toBe(1600);
     const rows = await page.locator('table tbody tr').allTextContents();
     expect(rows).toHaveLength(3);
     expect(rows.every((r) => /\d\.\d{3}/.test(r))).toBe(true);
@@ -258,7 +262,7 @@ describe.each(targets)('$name', (target) => {
     expect(await epochOf(page)).toBe(0);
     expect(problems).toEqual([]);
     await context.close();
-  });
+  }, 90_000);
 
   test('lesson 2: a recorded race and a live one, both revealed', async () => {
     const { context, page, problems } = await openPage(browser, target, baseURL);

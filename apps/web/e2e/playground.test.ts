@@ -334,6 +334,8 @@ describe.each(targets)('$name', (target) => {
     await context.close();
   }, 90_000);
 
+  // Lesson races train live on the CPU; CI WebKit (2-core Linux runner) is several times
+  // slower than a desktop, so these waits are generous.
   test('lesson 4: classical races, revealed', async () => {
     const { context, page, problems } = await openPage(browser, target, baseURL);
     await page.goto('./lessons/classical-models-out-of-range/', { waitUntil: 'networkidle' });
@@ -342,12 +344,12 @@ describe.each(targets)('$name', (target) => {
       await race.getByRole('radio').nth(1).click();
       await race.getByRole('button', { name: 'Run the race' }).click();
       await expect
-        .poll(() => race.getByText(/Well spotted|Not this time/).isVisible(), { timeout: 60000 })
+        .poll(() => race.getByText(/Well spotted|Not this time/).isVisible(), { timeout: 150000 })
         .toBe(true);
     }
     expect(problems).toEqual([]);
     await context.close();
-  }, 150_000);
+  }, 330_000);
 
   test('lesson: predict, race, reveal', async () => {
     const { context, page, problems } = await openPage(browser, target, baseURL);
@@ -355,9 +357,9 @@ describe.each(targets)('$name', (target) => {
     await page.getByRole('radio', { name: 'tanh' }).click();
     await page.getByRole('button', { name: 'Run the race' }).click();
     await expect
-      .poll(() => page.getByText(/Well spotted|Not this time/).isVisible(), { timeout: 30000 })
+      .poll(() => page.getByText(/Well spotted|Not this time/).isVisible(), { timeout: 120000 })
       .toBe(true);
     expect(problems).toEqual([]);
     await context.close();
-  });
+  }, 150_000);
 });

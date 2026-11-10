@@ -91,6 +91,10 @@ describe.each(targets)('$name', (target) => {
 
   test('averaged models show their spread; the card explains what it cannot show', async () => {
     const { context, page, problems } = await openPage(browser, target, baseURL);
+    // Same as a 4-core CI runner on every machine: 3 workers, so N3 waits for N1's copies.
+    await page.addInitScript(() =>
+      Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 4 }),
+    );
     await page.goto(
       await link({
         ...base,
@@ -122,12 +126,16 @@ describe.each(targets)('$name', (target) => {
       { waitUntil: 'networkidle' },
     );
     await page.getByRole('button', { name: 'Play' }).click();
+    // N1's three copies take all three workers; N3 trains afterwards, so wait for every score.
+    const rowsText = () => page.locator('table tbody tr').allTextContents();
+    await expect
+      .poll(async () => (await rowsText()).every((r) => /\d\.\d{3}/.test(r)), { timeout: 150000 })
+      .toBe(true);
     await expect.poll(() => epochOf(page), { timeout: 60000 }).toBe(200);
     expect(await page.getByText('Copies disagree').first().isVisible()).toBe(true);
-    const rows = await page.locator('table tbody tr').allTextContents();
+    const rows = await rowsText();
     expect(rows[0]).toContain('N1 ×3');
     expect(rows[1]).toContain('S2 ×3');
-    expect(rows.every((r) => /\d\.\d{3}/.test(r))).toBe(true);
     const card = page.locator('[data-insight]');
     await card.scrollIntoViewIfNeeded();
     expect(await card.locator('[data-insight-blocked]').textContent()).toContain(
@@ -145,5 +153,5 @@ describe.each(targets)('$name', (target) => {
     expect(await card.locator('[data-insight-blocked]').textContent()).toContain('smooth');
     expect(problems).toEqual([]);
     await context.close();
-  }, 120_000);
+  }, 240_000);
 });

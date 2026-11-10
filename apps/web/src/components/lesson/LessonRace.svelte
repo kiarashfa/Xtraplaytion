@@ -3,7 +3,7 @@
   // otherwise trained live). Built on the playground state and plots.
   import { onMount } from 'svelte';
   import { useTranslations } from '../../i18n';
-  import { dimsLabel, Playground } from '../../lib/playground.svelte.ts';
+  import { dimsLabel, modelName, Playground } from '../../lib/playground.svelte.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import { url } from '../../lib/url.ts';
   import Icon from '../Icon.svelte';
@@ -55,7 +55,7 @@
   });
   const name = (i: number) => {
     const m = pg.models[i];
-    return m ? `N${m.color} ${dimsLabel(m)}` : '';
+    return m ? `${modelName(m)}${m.kind === 'mlp' ? ` ${dimsLabel(m)}` : ''}` : '';
   };
   const nf = new Intl.NumberFormat('en');
 </script>

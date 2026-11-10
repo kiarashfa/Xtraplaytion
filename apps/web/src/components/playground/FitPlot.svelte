@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useTranslations } from '../../i18n';
-  import type { ModelRun, Playground } from '../../lib/playground.svelte.ts';
+  import { modelName, type ModelRun, type Playground } from '../../lib/playground.svelte.ts';
   import {
     autoYDomain,
     drawFit,
@@ -68,7 +68,11 @@
       valY: d.valY,
       gridX: d.gridX,
       truth: d.clean,
-      models: shown.map(({ run, frame }) => ({ ys: frame.grid, color: run.spec.color })),
+      models: shown.map(({ run, frame }) => ({
+        ys: frame.grid,
+        color: run.spec.color,
+        ...(frame.band ? { band: frame.band } : {}),
+      })),
       regionLabels: {
         train: t('pg.region.train'),
         gap: t('pg.region.gap'),
@@ -168,7 +172,11 @@
     return {
       x: d.gridX[i],
       truth: d.clean[i],
-      models: shown.map(({ run, frame }) => ({ color: run.spec.color, y: frame.grid[i] })),
+      models: shown.map(({ run, frame }) => ({
+        color: run.spec.color,
+        name: modelName(run.spec),
+        y: frame.grid[i],
+      })),
       left,
       flip: left > canvas.clientWidth - 180,
     };
@@ -179,7 +187,7 @@
     shown
       .map(({ run, frame }) =>
         t('pg.plot.model', {
-          name: `N${run.spec.color}`,
+          name: modelName(run.spec),
           inside: num(frame.metrics.inside),
           beyond: num(frame.metrics.beyond),
         }),
@@ -215,7 +223,7 @@
       </p>
       {#each hoverInfo.models as m (m.color)}
         <p class="flex justify-between">
-          <span class="font-semibold {COLOR_CLASS[(m.color - 1) % 6]}">N{m.color}</span><span
+          <span class="font-semibold {COLOR_CLASS[(m.color - 1) % 6]}">{m.name}</span><span
             class="font-mono">{fmt(m.y)}</span
           >
         </p>

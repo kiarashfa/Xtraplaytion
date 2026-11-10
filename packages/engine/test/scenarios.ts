@@ -1,7 +1,13 @@
 // Training scenarios run identically in Node and in browsers (identical.engines.ts).
 // No Node APIs here: browsers load this file.
 import { sin } from '@xtraplaytion/dmath';
-import { buildDataset, createRun, mlp, type MLPConfig } from '../src/index.ts';
+import {
+  buildDataset,
+  createRun,
+  mlp,
+  type ClassicalConfig,
+  type MLPConfig,
+} from '../src/index.ts';
 import type { FrameMsg, FromWorker } from '../src/worker/protocol.ts';
 
 const f64 = new Float64Array(1);
@@ -68,6 +74,27 @@ export const SCENARIOS: Record<string, MLPConfig> = {
   }),
 };
 
+/** Every classical family (uses dmath trig/exp/log, sorting, QR, Cholesky, seeded bootstrap). */
+export const CLASSICAL: Record<string, ClassicalConfig> = {
+  poly: { kind: 'poly', degree: 13 },
+  fourier: { kind: 'fourier', harmonics: 9, period: 0 },
+  spline: { kind: 'spline', segments: 24, smoothing: 0.003 },
+  knn: { kind: 'knn', k: 6, weights: 'distance' },
+  tree: { kind: 'tree', ensemble: 'single', depth: 7, trees: 1, minLeaf: 2, lr: 0.1 },
+  forest: { kind: 'tree', ensemble: 'forest', depth: 6, trees: 25, minLeaf: 2, lr: 0.1 },
+  boost: { kind: 'tree', ensemble: 'boost', depth: 3, trees: 60, minLeaf: 1, lr: 0.2 },
+  gp: {
+    kind: 'gp',
+    kernel: [
+      { kind: 'periodic', scale: 1, length: 1, period: 6 },
+      { kind: 'matern32', scale: 0.5, length: 2, period: 1 },
+      { kind: 'linear', scale: 0.2, length: 1, period: 1 },
+    ],
+    noise: 0.1,
+    tune: true,
+  },
+};
+
 export const EPOCHS = 300;
 
 export function runScenarios(): Record<string, string> {
@@ -77,6 +104,16 @@ export function runScenarios(): Record<string, string> {
     r.step(EPOCHS);
     out[name] =
       `${hash(r.trainLoss)}:${hash(r.valLoss)}:${hash(r.net.params)}:${hash(r.frame().grid)}`;
+  }
+  for (const [name, config] of Object.entries(CLASSICAL)) {
+    const r = createRun(config, data, 11, EPOCHS);
+    const grids: number[] = [];
+    for (let e = 0; e < EPOCHS; e += 15) {
+      r.step(15);
+      const f = r.frame();
+      grids.push(...f.grid, ...(f.band ?? []));
+    }
+    out[name] = `${hash(r.trainLoss)}:${hash(r.valLoss)}:${hash(grids)}`;
   }
   return out;
 }

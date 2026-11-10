@@ -15,6 +15,8 @@ export { regionMetrics, type RegionMetrics } from './metrics.ts';
 export { MLP, type LayerView } from './mlp.ts';
 export { lrAt, Optimizer } from './optim.ts';
 export { createRun, MLPRun, type Frame, type Model } from './run.ts';
+export * from './classical/index.ts';
+export { leastSquares, cholesky } from './classical/linalg.ts';
 export { GpuRun, gpuUnsupported, requestDevice, type Checkpoint } from './gpu/run.ts';
 export type {
   Backend,

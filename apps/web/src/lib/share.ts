@@ -5,23 +5,26 @@ import type {
   BackendChoice,
   LossKind,
   MLPConfig,
+  ModelConfig,
   Noise,
   OptimizerKind,
 } from '@xtraplaytion/engine';
+import { validClassical } from './models.ts';
 
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 const MAX_DECODED = 64 * 1024;
 
 export interface SharedModel {
-  model: MLPConfig;
+  model: ModelConfig;
   /** Seed for this model's initial weights (the data has its own seed). */
   seed: number;
   visible: boolean;
 }
 
-/** Version 2: several competitors. Version 1 links (one model) are migrated on load. */
+/** Version 3: competitors can be classical models. Version 2 (networks only) has the same
+ *  shape; version 1 links (one network) are migrated on load. */
 export interface ExperimentState {
-  v: 2;
+  v: 3;
   expr: string;
   domain: [number, number];
   n: number;
@@ -126,7 +129,7 @@ export function validateState(o: unknown): ExperimentState | null {
   if (!o || typeof o !== 'object') return null;
   const s = o as Record<string, unknown>;
   if (
-    (s['v'] !== 1 && s['v'] !== STATE_VERSION) ||
+    (s['v'] !== 1 && s['v'] !== 2 && s['v'] !== STATE_VERSION) ||
     typeof s['expr'] !== 'string' ||
     s['expr'].length > LIMITS.exprLength
   )
@@ -168,7 +171,11 @@ export function validateState(o: unknown): ExperimentState | null {
     for (const m of list) {
       if (!m || typeof m !== 'object') return null;
       const r = m as Record<string, unknown>;
-      const model = validModel(r['model']);
+      // Version 2 links hold networks only.
+      const model =
+        s['v'] === 2
+          ? validModel(r['model'])
+          : (validModel(r['model']) ?? validClassical(r['model']));
       if (!model || !isNum(r['seed'])) return null;
       models.push({
         model,
@@ -178,7 +185,7 @@ export function validateState(o: unknown): ExperimentState | null {
     }
   }
   return {
-    v: 2,
+    v: STATE_VERSION,
     expr: s['expr'],
     domain,
     n: Math.round(clamp(s['n'], 2, LIMITS.n)),

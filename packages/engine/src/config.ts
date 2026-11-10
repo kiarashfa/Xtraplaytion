@@ -69,7 +69,79 @@ export interface MLPConfig {
   dropout: number;
 }
 
-export type ModelConfig = MLPConfig;
+// ---- Classical models. They fit in closed form (or by a short inner optimization) and
+// still animate: each one grows through stages (see classical/staged.ts).
+
+/** Least-squares polynomial (Legendre basis inside, the same polynomial outside). */
+export interface PolyConfig {
+  kind: 'poly';
+  degree: number;
+}
+
+/** Least-squares Fourier series: a constant plus `harmonics` sine/cosine pairs. */
+export interface FourierConfig {
+  kind: 'fourier';
+  harmonics: number;
+  /** Length after which the series repeats, in x units. 0 = the span of the training data. */
+  period: number;
+}
+
+/** Penalized cubic B-spline (P-spline). Continues as a straight line beyond the data. */
+export interface SplineConfig {
+  kind: 'spline';
+  /** Equal pieces between the first and last training point. */
+  segments: number;
+  /** Penalty on bending, per training point (0 = plain least squares). */
+  smoothing: number;
+}
+
+export interface KnnConfig {
+  kind: 'knn';
+  k: number;
+  weights: 'uniform' | 'distance';
+}
+
+export interface TreeConfig {
+  kind: 'tree';
+  /** One regression tree, a random forest (bagging) or gradient boosting. */
+  ensemble: 'single' | 'forest' | 'boost';
+  depth: number;
+  /** Trees in a forest, rounds of boosting (ignored for a single tree). */
+  trees: number;
+  /** Fewest training points in a leaf. */
+  minLeaf: number;
+  /** Boosting learning rate (shrinkage). */
+  lr: number;
+}
+
+export type KernelKind = 'rbf' | 'matern12' | 'matern32' | 'matern52' | 'periodic' | 'linear';
+
+/** One term of a sum kernel. Units: `scale` relative to the spread (std) of the training
+ *  targets; `length` and `period` in x units (unused by kinds that do not need them). */
+export interface KernelPart {
+  kind: KernelKind;
+  scale: number;
+  length: number;
+  period: number;
+}
+
+/** Gaussian process regression. With `tune` off this is kernel ridge regression (the GP
+ *  mean), with ridge strength = noise variance; the band is the GP posterior either way. */
+export interface GPConfig {
+  kind: 'gp';
+  kernel: KernelPart[];
+  /** Noise std relative to the spread of the training targets. */
+  noise: number;
+  /** Maximize the evidence (log marginal likelihood) from the given starting values. */
+  tune: boolean;
+}
+
+export type ClassicalConfig =
+  PolyConfig | FourierConfig | SplineConfig | KnnConfig | TreeConfig | GPConfig;
+export type ModelConfig = MLPConfig | ClassicalConfig;
+export type ModelKind = ModelConfig['kind'];
+
+export const isMLP = (c: ModelConfig): c is MLPConfig => c.kind === 'mlp';
 
 /** Layer widths including input and output, e.g. [1, 10, 10, 1]. */
 export function dimsOf(c: MLPConfig): number[] {

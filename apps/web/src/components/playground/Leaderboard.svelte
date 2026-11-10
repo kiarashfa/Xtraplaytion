@@ -1,7 +1,7 @@
 <script lang="ts">
   import { paramCountOf } from '@xtraplaytion/engine';
   import { useTranslations, type MessageKey } from '../../i18n';
-  import { specConfig, type Playground } from '../../lib/playground.svelte.ts';
+  import { modelName, netConfig, type Playground } from '../../lib/playground.svelte.ts';
   import Swatch from './Swatch.svelte';
 
   const { pg }: { pg: Playground } = $props();
@@ -21,18 +21,24 @@
     pg.models.map((m) => {
       const run = pg.runOf(m);
       const f = run?.frameAt(pg.viewEpoch) ?? null;
-      // Validation in the same units as the other columns (RMSE) when the loss is MSE.
-      const val = f ? (m.loss === 'mse' ? Math.sqrt(f.valLoss) : f.valLoss) : NaN;
+      // Validation in the same units as the other columns (RMSE) when the loss is MSE
+      // (classical models always report squared error).
+      const squared = m.kind !== 'mlp' || m.loss === 'mse';
+      const val = f ? (squared ? Math.sqrt(f.valLoss) : f.valLoss) : NaN;
+      const stage = f?.stage;
       return {
         spec: m,
+        name: modelName(m),
         status: run?.status,
         gpu: run?.backend === 'webgpu',
+        building: !!stage && stage.at < stage.of - 1,
         values: {
           inside: f?.metrics.inside ?? NaN,
           val,
           gap: f?.metrics.gap ?? NaN,
           beyond: f?.metrics.beyond ?? NaN,
-          params: paramCountOf(specConfig(m)),
+          // Numbers a classical model stores depend on its fit (tree leaves, data points).
+          params: m.kind === 'mlp' ? paramCountOf(netConfig(m)) : (stage?.params ?? NaN),
         } as Record<Key, number>,
       };
     }),
@@ -92,10 +98,14 @@
         >
           <th scope="row" class="px-2.5 py-2 text-start font-sans font-semibold whitespace-nowrap"
             ><span class="flex items-center gap-2"
-              ><Swatch color={r.spec.color} width={22} />N{r.spec.color}
+              ><Swatch color={r.spec.color} width={22} />{r.name}
               {#if r.gpu}<abbr
                   class="rounded-full border border-line px-1.5 text-[10.5px] font-medium text-muted no-underline"
                   title={t('pg.score.gpuHelp')}>{t('pg.score.gpu')}</abbr
+                >{/if}
+              {#if r.building && !b}<span
+                  class="rounded-full bg-accent-soft px-1.5 text-[11px] font-medium text-muted"
+                  >{t('pg.score.building')}</span
                 >{/if}
               {#if b}<span
                   class="rounded-full bg-accent-soft px-1.5 text-[11px] font-medium text-muted"
@@ -106,7 +116,9 @@
           {#each columns as c (c.key)}
             <td class="px-2.5 py-2"
               >{c.key === 'params'
-                ? r.values.params.toLocaleString('en')
+                ? Number.isFinite(r.values.params)
+                  ? r.values.params.toLocaleString('en')
+                  : '-'
                 : fmt(r.values[c.key])}</td
             >
           {/each}

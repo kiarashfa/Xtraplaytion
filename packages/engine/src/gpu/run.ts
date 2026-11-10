@@ -20,6 +20,7 @@ import {
 
 /** Why a configuration cannot train on the GPU, or null if it can. */
 export function gpuUnsupported(c: ModelConfig): string | null {
+  if (c.kind !== 'mlp') return 'classical';
   if (c.batch.kind !== 'full') return 'minibatch';
   if (c.dropout > 0) return 'dropout';
   return null;
@@ -320,7 +321,7 @@ export class GpuRun {
   /** Creates a run on `device` (fresh, or resumed from a checkpoint). */
   static async create(
     device: GPUDevice,
-    config: ModelConfig,
+    config: MLPConfig,
     data: Dataset,
     seed: number,
     from?: Checkpoint,

@@ -112,7 +112,8 @@ export interface FitScene {
   valY: ArrayLike<number>;
   gridX: ArrayLike<number>;
   truth: ArrayLike<number> | null;
-  models: { ys: ArrayLike<number>; color: number; label?: string }[];
+  /** `band`: posterior std on the grid, drawn as a shaded ±2 std range. */
+  models: { ys: ArrayLike<number>; color: number; label?: string; band?: ArrayLike<number> }[];
   regionLabels: { train: string; gap: string; beyond: string } | null;
   handles: boolean;
   /** Highlighted band edge (dragging/hover): [band index, 0 = left, 1 = right] */
@@ -177,6 +178,35 @@ function polyline(ctx: Ctx, f: Frame2D, xs: ArrayLike<number>, ys: ArrayLike<num
     else ctx.moveTo(px, py);
     pen = true;
   }
+}
+
+/** Closed path around ys ± 2 std (finite points only; values clamped like polyline). */
+function bandPath(
+  ctx: Ctx,
+  f: Frame2D,
+  xs: ArrayLike<number>,
+  ys: ArrayLike<number>,
+  sd: ArrayLike<number>,
+) {
+  const span = f.yDomain[1] - f.yDomain[0];
+  const lo = f.yDomain[0] - 4 * span;
+  const hi = f.yDomain[1] + 4 * span;
+  const py = (v: number) => sy(f, Math.min(hi, Math.max(lo, v)));
+  const idx: number[] = [];
+  for (let i = 0; i < xs.length; i++)
+    if (Number.isFinite(ys[i]) && Number.isFinite(sd[i])) idx.push(i);
+  ctx.beginPath();
+  idx.forEach((i, k) => {
+    const x = sx(f, xs[i]);
+    const y = py(ys[i] + 2 * sd[i]);
+    if (k) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
+  });
+  for (let k = idx.length - 1; k >= 0; k--) {
+    const i = idx[k];
+    ctx.lineTo(sx(f, xs[i]), py(ys[i] - 2 * sd[i]));
+  }
+  ctx.closePath();
 }
 
 export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
@@ -273,6 +303,16 @@ export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+
+  // Uncertainty bands first, so every line stays on top of every band.
+  for (const m of s.models) {
+    if (!m.band) continue;
+    ctx.fillStyle = th.competitors[(m.color - 1) % th.competitors.length];
+    ctx.globalAlpha = 0.14;
+    bandPath(ctx, f, s.gridX, m.ys, m.band);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 
   for (const m of s.models) {
     const color = th.competitors[(m.color - 1) % th.competitors.length];

@@ -55,12 +55,15 @@ export function presetState(p: Preset): ExperimentState {
     valFraction: DEFAULT_VAL,
     bands: p.bands.map((b) => [...b] as [number, number]),
     models: list.map((m, i) => ({
-      model: mlp({
-        hidden: m.hidden,
-        activations: m.hidden.map(() => m.act),
-        optimizer: { kind: 'adam', lr: m.lr ?? p.lr },
-        loss: { kind: 'mse' },
-      }),
+      model:
+        'model' in m
+          ? m.model
+          : mlp({
+              hidden: m.hidden,
+              activations: m.hidden.map(() => m.act),
+              optimizer: { kind: 'adam', lr: m.lr ?? p.lr },
+              loss: { kind: 'mse' },
+            }),
       seed: m.seed ?? i + 1,
       visible: true,
     })),

@@ -10,10 +10,12 @@ import {
   type Activation,
   type Backend,
   type BackendChoice,
+  type ClassicalConfig,
   type FallbackReason,
   type Dataset,
   type LossKind,
   type MLPConfig,
+  type ModelConfig,
   type Noise,
   type OptimizerKind,
 } from '@xtraplaytion/engine';
@@ -28,10 +30,11 @@ import {
 } from './capability.ts';
 import { datasetFor, presetState, trainingIdentity } from './experiment.ts';
 import { FrameHistory, type StoredFrame } from './history.ts';
+import { classicalSeconds, defaultClassical, LETTER, type Family } from './models.ts';
 import type { Preset } from './presets.ts';
 import { loadRecording, type Recording, type RecordedModel } from './recording.ts';
 import { recordingUrl } from './recordings.ts';
-import { LIMITS, type ExperimentState } from './share.ts';
+import { LIMITS, STATE_VERSION, type ExperimentState } from './share.ts';
 import { Trainer } from './trainer.ts';
 
 export type Status = 'ready' | 'running' | 'paused' | 'done' | 'diverged' | 'error';
@@ -67,21 +70,40 @@ export interface Layer {
   act: Activation;
 }
 
-export interface ModelSpec {
+interface SpecBase {
   /** Stable id (survives reordering). */
   id: number;
   /** Palette slot 1..6 (color and dash pattern). */
   color: number;
-  layers: Layer[];
-  optimizer: OptimizerKind;
-  lr: number;
-  loss: LossKind;
-  /** Seed for the initial weights. */
+  /** Seed for the initial weights (networks) or the bootstrap samples (forests). */
   seed: number;
   visible: boolean;
 }
 
-export function specConfig(s: ModelSpec): MLPConfig {
+export interface NetSpec extends SpecBase {
+  kind: 'mlp';
+  layers: Layer[];
+  optimizer: OptimizerKind;
+  lr: number;
+  loss: LossKind;
+}
+
+export interface ClassicSpec extends SpecBase {
+  kind: 'classical';
+  config: ClassicalConfig;
+}
+
+export type ModelSpec = NetSpec | ClassicSpec;
+
+export const familyOf = (s: ModelSpec): Family => (s.kind === 'mlp' ? 'mlp' : s.config.kind);
+/** Display name: family letter + color slot (N1, P3...). */
+export const modelName = (s: ModelSpec) => `${LETTER[familyOf(s)]}${s.color}`;
+
+export function specConfig(s: ModelSpec): ModelConfig {
+  return s.kind === 'classical' ? s.config : netConfig(s);
+}
+
+export function netConfig(s: NetSpec): MLPConfig {
   return mlp({
     hidden: s.layers.map((l) => l.width),
     activations: s.layers.map((l) => l.act),
@@ -94,7 +116,7 @@ export function specConfig(s: ModelSpec): MLPConfig {
   });
 }
 
-export const dimsLabel = (s: ModelSpec) => `[1, ${s.layers.map((l) => l.width).join(', ')}, 1]`;
+export const dimsLabel = (s: NetSpec) => `[1, ${s.layers.map((l) => l.width).join(', ')}, 1]`;
 
 /** A preset's recording plays instead of live training above this estimated time. */
 export const LIVE_LIMIT_SECONDS = 60;
@@ -147,6 +169,8 @@ export class ModelRun {
             metrics: f.metrics,
             trainLoss: f.trainLoss,
             valLoss: f.valLoss,
+            ...(f.band ? { band: f.band } : {}),
+            ...(f.stage ? { stage: f.stage } : {}),
           });
           this.latest = f.epoch;
           if (f.epochsPerSec) this.epochsPerSec = f.epochsPerSec;
@@ -213,8 +237,9 @@ const newSpec = (
   layers: Layer[],
   lr = 0.003,
   act?: Activation,
-): ModelSpec => ({
+): NetSpec => ({
   id: nextId++,
+  kind: 'mlp',
   color,
   layers: layers.map((l) => ({ width: l.width, act: act ?? l.act })),
   optimizer: 'adam',
@@ -223,6 +248,12 @@ const newSpec = (
   seed,
   visible: true,
 });
+
+const defaultNet = (color: number, seed: number) =>
+  newSpec(color, seed, [
+    { width: 64, act: 'relu' },
+    { width: 64, act: 'relu' },
+  ]);
 
 export class Playground {
   // ---- target and data
@@ -349,11 +380,14 @@ export class Playground {
     return this.clock > 0 ? 'paused' : 'ready';
   });
 
-  /** Estimated training time of each model on this device (models run in parallel). */
+  /** Estimated training time of each model on this device (models run in parallel).
+   *  Classical models fit on the CPU in a moment (Gaussian processes take longer). */
   estimates = $derived(
     this.models.map((m) => {
       const cfg = specConfig(m);
       const points = this.data ? this.data.trainY.length : this.n;
+      if (cfg.kind !== 'mlp')
+        return classicalSeconds(cfg, points, FALLBACK_SPEED / this.deviceSpeed);
       const params = paramCountOf(cfg);
       return this.onGpu && this.gpuSpeed
         ? estimateGpuSeconds(params, points, this.epochs, this.gpuSpeed)
@@ -365,10 +399,17 @@ export class Playground {
    *  caches, lower boost clocks; about 25% per extra worker, measured on desktop
    *  Chrome). On the GPU, models share one graphics card, so their times add up. */
   estimateTotal = $derived.by(() => {
-    if (this.onGpu) return this.estimates.reduce((s, e) => s + e, 0);
-    const k = Math.min(this.models.length, this.maxWorkers);
-    const rounds = Math.ceil(this.models.length / this.maxWorkers);
-    return Math.max(0, ...this.estimates) * rounds * (1 + 0.25 * (k - 1));
+    const isNet = (i: number) => this.models[i]?.kind === 'mlp';
+    const nets = this.estimates.filter((_, i) => isNet(i));
+    const classic = Math.max(0, ...this.estimates.filter((_, i) => !isNet(i)));
+    if (this.onGpu)
+      return Math.max(
+        classic,
+        nets.reduce((s, e) => s + e, 0),
+      );
+    const k = Math.min(nets.length, this.maxWorkers);
+    const rounds = Math.ceil(nets.length / this.maxWorkers);
+    return Math.max(classic, Math.max(0, ...nets) * rounds * (1 + 0.25 * Math.max(0, k - 1)));
   });
 
   /** True when the race on screen should be the preset's recording: the experiment is
@@ -418,8 +459,25 @@ export class Playground {
     if (this.runs.every((r) => r.finished)) this.playing = false;
   };
 
-  /** Start over from epoch 0 with the current settings (paused). */
+  /** Set while a settings change waits to restart the race (debounced by the page). */
+  restartPending = false;
+  /** Play was pressed while a restart was pending: play once the new race exists. */
+  private playAfterRestart = false;
+
+  /** Start over from epoch 0 with the current settings (paused, unless Play was pressed
+   *  while this restart was pending). */
   restart() {
+    const resume = this.playAfterRestart;
+    this.playAfterRestart = false;
+    this.restartPending = false;
+    this.rebuild();
+    if (resume) {
+      if (this.runs.length) this.play();
+      else this.playAfterRestart = true; // a recording is still loading
+    }
+  }
+
+  private rebuild() {
     for (const r of this.runs) r.trainer.dispose();
     this.playing = false;
     this.replayEpoch = null;
@@ -459,7 +517,11 @@ export class Playground {
     );
     this.runs = runs;
     this.waves = 0;
-    runs.slice(0, this.maxWorkers).forEach((r) => this.startRun(r, 0));
+    // Classical models fit in a moment and then idle, so they do not take a worker slot.
+    let nets = 0;
+    for (const r of runs) {
+      if (r.spec.kind !== 'mlp' || nets++ < this.maxWorkers) this.startRun(r, 0);
+    }
   }
 
   private showRecording(rec: Recording, data: Dataset) {
@@ -522,6 +584,10 @@ export class Playground {
   };
 
   play() {
+    if (this.restartPending) {
+      this.playAfterRestart = true;
+      return;
+    }
     if (
       this.status === 'done' ||
       this.status === 'diverged' ||
@@ -607,17 +673,44 @@ export class Playground {
 
   // ------------------------------------------------------------ models
 
-  addModel() {
+  /** Adds a competitor. A network starts as a copy of the selected (or last) network with
+   *  new starting weights; a classical model starts from its defaults. */
+  addModel(family: Family = 'mlp') {
     if (this.models.length >= LIMITS.models) return;
     const used = this.models.map((m) => m.color);
     const color = [1, 2, 3, 4, 5, 6].find((c) => !used.includes(c)) ?? 1;
-    const base = this.models[this.selected] ?? this.models[0];
     const seed = Math.max(...this.models.map((m) => m.seed)) + 1;
-    this.models = [
-      ...this.models,
-      { ...$state.snapshot(base), id: nextId++, color, seed, visible: true } as ModelSpec,
-    ];
+    const common = { id: nextId++, color, seed, visible: true };
+    let spec: ModelSpec;
+    if (family === 'mlp') {
+      const sel = this.models[this.selected];
+      const base =
+        sel?.kind === 'mlp' ? sel : this.models.findLast((m): m is NetSpec => m.kind === 'mlp');
+      spec = {
+        ...(base ? ($state.snapshot(base) as NetSpec) : defaultNet(color, seed)),
+        ...common,
+      };
+    } else {
+      spec = { kind: 'classical', config: this.defaultFor(family), ...common };
+    }
+    this.models = [...this.models, spec];
     this.selected = this.models.length - 1;
+  }
+
+  private defaultFor(family: ClassicalConfig['kind']): ClassicalConfig {
+    return defaultClassical(family, this.domain[1] - this.domain[0]);
+  }
+
+  /** Turns model i into another family (keeps its color, seed and visibility). */
+  changeFamily(i: number, family: Family) {
+    const m = this.models[i];
+    if (!m || familyOf(m) === family) return;
+    const { id, color, seed, visible } = m;
+    const next: ModelSpec =
+      family === 'mlp'
+        ? { ...defaultNet(color, seed), id, visible }
+        : { kind: 'classical', config: this.defaultFor(family), id, color, seed, visible };
+    this.models = this.models.map((s, k) => (k === i ? next : s));
   }
 
   removeModel(i: number) {
@@ -626,8 +719,23 @@ export class Playground {
     this.selected = Math.min(this.selected, this.models.length - 1);
   }
 
-  updateModel(i: number, patch: Partial<ModelSpec>) {
-    this.models = this.models.map((m, k) => (k === i ? { ...m, ...patch } : m));
+  /** Changes fields every model has, or network fields when model i is a network. */
+  updateModel(i: number, patch: Partial<SpecBase> | Partial<Omit<NetSpec, 'kind'>>) {
+    this.models = this.models.map((m, k) => {
+      if (k !== i) return m;
+      if (m.kind === 'mlp') return { ...m, ...patch };
+      const { id, color, seed, visible } = { ...m, ...(patch as Partial<SpecBase>) };
+      return { ...m, id, color, seed, visible };
+    });
+  }
+
+  /** Changes the configuration of classical model i (same family). */
+  updateClassical(i: number, patch: Partial<ClassicalConfig>) {
+    this.models = this.models.map((m, k) =>
+      k === i && m.kind === 'classical'
+        ? { ...m, config: { ...m.config, ...patch } as ClassicalConfig }
+        : m,
+    );
   }
 
   runOf(spec: ModelSpec): ModelRun | undefined {
@@ -647,7 +755,7 @@ export class Playground {
 
   snapshotState(): ExperimentState {
     return {
-      v: 2,
+      v: STATE_VERSION,
       expr: this.expr,
       domain: [...this.domain],
       n: this.n,
@@ -674,16 +782,19 @@ export class Playground {
     if (nz.kind === 'gaussian' || nz.kind === 'outliers' || nz.kind === 'hetero')
       this.sigma = nz.sigma;
     if (nz.kind === 'uniform') this.sigma = nz.width / 2;
-    this.models = s.models.map((m, i) => ({
-      id: nextId++,
-      color: i + 1,
-      layers: m.model.hidden.map((width, k) => ({ width, act: m.model.activations[k] })),
-      optimizer: m.model.optimizer.kind,
-      lr: m.model.optimizer.lr,
-      loss: m.model.loss.kind,
-      seed: m.seed,
-      visible: m.visible,
-    }));
+    this.models = s.models.map((m, i): ModelSpec => {
+      const common = { id: nextId++, color: i + 1, seed: m.seed, visible: m.visible };
+      const c = m.model;
+      if (c.kind !== 'mlp') return { kind: 'classical', config: c, ...common };
+      return {
+        kind: 'mlp',
+        layers: c.hidden.map((width, k) => ({ width, act: c.activations[k] })),
+        optimizer: c.optimizer.kind,
+        lr: c.optimizer.lr,
+        loss: c.loss.kind,
+        ...common,
+      };
+    });
     this.selected = 0;
     this.layout = s.layout;
     this.epochs = s.epochs;

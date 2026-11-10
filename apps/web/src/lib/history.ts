@@ -4,7 +4,7 @@
 // doubles and the frames that no longer fit it are dropped. Spacing therefore
 // stays even over the whole run and memory stays bounded. The latest frame is
 // always kept separately, so "now" is never lost.
-import type { RegionMetrics } from '@xtraplaytion/engine';
+import type { RegionMetrics, StageInfo } from '@xtraplaytion/engine';
 
 export interface StoredFrame {
   epoch: number;
@@ -12,6 +12,10 @@ export interface StoredFrame {
   metrics: RegionMetrics;
   trainLoss: number;
   valLoss: number;
+  /** Posterior std on the grid (Gaussian process). */
+  band?: Float32Array;
+  /** Build-up of a classical model. */
+  stage?: StageInfo;
 }
 
 interface Slot {
@@ -81,6 +85,6 @@ export class FrameHistory {
 
   /** Approximate memory use in bytes (grids dominate). */
   bytes(): number {
-    return this.frames.reduce((s, f) => s + f.grid.byteLength + 64, 0);
+    return this.frames.reduce((s, f) => s + f.grid.byteLength + (f.band?.byteLength ?? 0) + 64, 0);
   }
 }

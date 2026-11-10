@@ -23,6 +23,7 @@ export async function record(
   for (const m of state.models) {
     const { device, adapter } = await requestDevice();
     adapterName = adapter;
+    if (m.model.kind !== 'mlp') throw new Error('recordings hold networks only');
     const run = await GpuRun.create(device, m.model, data, m.seed);
     const frameEpochs: number[] = [];
     const grids: number[][] = [];

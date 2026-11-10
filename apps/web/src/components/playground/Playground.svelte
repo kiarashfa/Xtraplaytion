@@ -8,7 +8,7 @@
     measureGpu,
     measureSpeed,
   } from '../../lib/capability.ts';
-  import { Playground } from '../../lib/playground.svelte.ts';
+  import { modelName, Playground } from '../../lib/playground.svelte.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import { decodeState, encodeState } from '../../lib/share.ts';
   import Icon from '../Icon.svelte';
@@ -110,6 +110,7 @@
     void pg.data;
     void pg.trainingKey;
     void pg.recordingWanted;
+    pg.restartPending = true; // Play pressed meanwhile starts the new race
     const id = setTimeout(() => pg.restart(), 120);
     return () => clearTimeout(id);
   });
@@ -128,7 +129,7 @@
   const diverged = $derived(
     pg.runs
       .filter((r) => r.status === 'diverged')
-      .map((r) => `N${r.spec.color}`)
+      .map((r) => modelName(r.spec))
       .join(', '),
   );
   const failure = $derived(pg.runs.find((r) => r.status === 'error')?.errorMessage ?? '');
@@ -143,7 +144,7 @@
   );
   const slow = $derived(pg.clock === 0 && pg.status !== 'running' && pg.estimateTotal > 600);
   const backendChoices = ['auto', 'cpu', 'gpu'] as const;
-  const names = (rs: typeof pg.runs) => rs.map((r) => `N${r.spec.color}`).join(', ');
+  const names = (rs: typeof pg.runs) => rs.map((r) => modelName(r.spec)).join(', ');
   // GPU trouble worth telling (a lost device, or a model that could not use the GPU).
   const gpuNotice = $derived.by(() => {
     const lost = pg.runs.filter((r) => r.recoveredAt !== null);
@@ -356,9 +357,17 @@
             <li
               class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
             >
-              <Swatch color={m.color} width={20} />N{m.color}
+              <Swatch color={m.color} width={20} />{modelName(m)}
             </li>
           {/each}
+          {#if pg.models.some((m) => m.visible && m.kind === 'classical' && m.config.kind === 'gp')}
+            <li
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
+              title={t('pg.legend.bandHint')}
+            >
+              <span class="h-3 w-4 rounded-sm bg-ink/15"></span>{t('pg.legend.band')}
+            </li>
+          {/if}
         </ul>
         {#if pg.models.length > 1}
           <div
@@ -382,7 +391,7 @@
       {#if stacked}
         <div class="flex flex-col gap-1 px-1.5 pt-1 pb-2 sm:px-2">
           {#each pg.visibleRuns as r (r.spec.id)}
-            <FitPlot {pg} runs={[r]} compact={mobile} short tag={`N${r.spec.color}`} />
+            <FitPlot {pg} runs={[r]} compact={mobile} short tag={modelName(r.spec)} />
           {/each}
         </div>
       {:else}

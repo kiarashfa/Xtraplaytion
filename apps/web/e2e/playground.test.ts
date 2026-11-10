@@ -128,6 +128,7 @@ describe.each(targets)('$name', (target) => {
     const rows = page.locator('table tbody tr');
     await expect.poll(() => rows.count()).toBe(1);
     await page.getByRole('button', { name: 'Add model' }).click();
+    await page.getByRole('button', { name: /^Neural network/ }).click();
     await expect.poll(() => rows.count()).toBe(2);
     // adding opens the settings of the new model, and only those
     expect(await page.getByRole('button', { name: 'Edit N2' }).getAttribute('aria-expanded')).toBe(
@@ -140,6 +141,55 @@ describe.each(targets)('$name', (target) => {
     expect(await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).count()).toBe(0);
     await context.close();
   });
+
+  test('classical models race with a network, build up, then hold, and survive a share link', async () => {
+    const { context, page, problems } = await openPage(browser, target, baseURL);
+    await page.goto('./playground/', { waitUntil: 'networkidle' });
+    await showTab(page, 'Train');
+    await page.getByRole('spinbutton', { name: 'Epochs' }).fill('400');
+    await page.getByRole('spinbutton', { name: 'Epochs' }).press('Tab');
+    await showTab(page, 'Models');
+    for (const kind of ['Polynomial', 'Gaussian process', 'Decision tree']) {
+      await page.getByRole('button', { name: 'Add model' }).click();
+      await page.getByRole('button', { name: new RegExp(`^${kind}`) }).click();
+    }
+    // A forest instead of one tree; a degree-11 polynomial.
+    await page.getByRole('combobox', { name: 'Type' }).selectOption('forest');
+    await page.getByRole('button', { name: 'Edit P2' }).click();
+    await page.getByRole('spinbutton', { name: 'Degree' }).fill('11');
+    await page.getByRole('spinbutton', { name: 'Degree' }).press('Tab');
+    const rows = page.locator('table tbody tr');
+    await expect
+      .poll(() => rows.allTextContents())
+      .toEqual([
+        expect.stringContaining('N1'),
+        expect.stringContaining('P2'),
+        expect.stringContaining('G3'),
+        expect.stringContaining('T4'),
+      ]);
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect
+      .poll(() => page.getByText('Finished 400 epochs.').count(), { timeout: 60000 })
+      .toBeGreaterThan(0);
+    const done = await rows.allTextContents();
+    expect(done.some((r) => r.includes('building'))).toBe(false);
+    expect(done[1]).toMatch(/P2.*12$/); // degree 11: 12 coefficients
+    // While building, the polynomial is simpler (lower degree) than at the end.
+    await page.getByRole('slider', { name: 'Epoch shown' }).fill('20');
+    await expect.poll(() => rows.nth(1).textContent()).toContain('building');
+    await page.getByRole('button', { name: 'Live' }).click();
+    await page.getByRole('button', { name: /Share/ }).click();
+    await expect.poll(() => page.url()).toContain('#s=');
+    const fresh = await context.newPage();
+    await fresh.goto(page.url());
+    await expect.poll(() => fresh.locator('table tbody tr').count()).toBe(4);
+    await showTab(fresh, 'Models');
+    await fresh.getByRole('button', { name: 'Edit P2' }).click();
+    expect(await fresh.getByRole('spinbutton', { name: 'Degree' }).inputValue()).toBe('11');
+    expect(await fresh.locator('[data-model="T4"]').textContent()).toContain('50 trees');
+    expect(problems).toEqual([]);
+    await context.close();
+  }, 90_000);
 
   test('epochs: slider steps and exact numbers', async () => {
     const { context, page } = await openPage(browser, target, baseURL);
@@ -281,6 +331,21 @@ describe.each(targets)('$name', (target) => {
     expect(problems).toEqual([]);
     await context.close();
   }, 90_000);
+
+  test('lesson 4: classical races, revealed', async () => {
+    const { context, page, problems } = await openPage(browser, target, baseURL);
+    await page.goto('./lessons/classical-models-out-of-range/', { waitUntil: 'networkidle' });
+    for (const id of ['classic-beyond', 'classic-runge']) {
+      const race = page.locator(`[data-lesson-race=${id}]`);
+      await race.getByRole('radio').nth(1).click();
+      await race.getByRole('button', { name: 'Run the race' }).click();
+      await expect
+        .poll(() => race.getByText(/Well spotted|Not this time/).isVisible(), { timeout: 60000 })
+        .toBe(true);
+    }
+    expect(problems).toEqual([]);
+    await context.close();
+  }, 150_000);
 
   test('lesson: predict, race, reveal', async () => {
     const { context, page, problems } = await openPage(browser, target, baseURL);

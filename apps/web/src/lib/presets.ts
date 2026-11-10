@@ -1,5 +1,10 @@
 // Ready-made experiments. Names and descriptions are i18n keys: preset.<id>.name / .hint
-import type { Activation } from '@xtraplaytion/engine';
+import type { Activation, ClassicalConfig } from '@xtraplaytion/engine';
+
+/** A suggested competitor: a network, or a classical model. */
+export type PresetModel =
+  | { hidden: number[]; act: Activation; lr?: number; seed?: number }
+  | { model: ClassicalConfig; seed?: number };
 
 export interface Preset {
   id: string;
@@ -13,7 +18,7 @@ export interface Preset {
   act: Activation;
   lr: number;
   /** Suggested competitors (a race). Without it the preset trains one model. */
-  models?: { hidden: number[]; act: Activation; lr?: number; seed?: number }[];
+  models?: PresetModel[];
   layout?: 'overlay' | 'stacked';
   /** Ships a recorded run (src/recordings/<id>.xpr), played where live training would be slow. */
   recorded?: boolean;
@@ -96,6 +101,73 @@ export const PRESETS: Preset[] = [
       { hidden: [4], act: 'tanh' },
       { hidden: [32, 32], act: 'tanh' },
       { hidden: [128, 128, 128], act: 'relu' },
+    ],
+  }),
+  // Classical models out of range: each family has its own way of guessing.
+  p('classic-beyond', 'sin(x) + 0.3x', [-10, 10], {
+    sigma: 0.05,
+    n: 160,
+    bands: [[-6, 3]],
+    epochs: 1600,
+    models: [
+      { hidden: [64, 64], act: 'relu' },
+      { model: { kind: 'poly', degree: 9 } },
+      { model: { kind: 'fourier', harmonics: 8, period: 0 } },
+      { model: { kind: 'spline', segments: 20, smoothing: 0.01 } },
+      { model: { kind: 'tree', ensemble: 'forest', depth: 8, trees: 40, minLeaf: 2, lr: 0.1 } },
+      {
+        model: {
+          kind: 'gp',
+          kernel: [{ kind: 'rbf', scale: 1, length: 2, period: 5 }],
+          noise: 0.1,
+          tune: true,
+        },
+      },
+    ],
+    layout: 'stacked',
+  }),
+  p('classic-gap', 'sin(x) + 0.5 sin(2x) + (1/3) sin(3x)', [-10, 10], {
+    sigma: 0.05,
+    bands: [
+      [-7.5, -2],
+      [1.5, 6.5],
+    ],
+    epochs: 1600,
+    models: [
+      { hidden: [64, 64], act: 'relu' },
+      { model: { kind: 'poly', degree: 15 } },
+      { model: { kind: 'spline', segments: 24, smoothing: 0.01 } },
+      { model: { kind: 'knn', k: 5, weights: 'uniform' } },
+      {
+        model: {
+          kind: 'gp',
+          kernel: [
+            { kind: 'periodic', scale: 1, length: 1, period: 6 },
+            { kind: 'rbf', scale: 0.3, length: 6, period: 6 },
+          ],
+          noise: 0.1,
+          tune: true,
+        },
+      },
+    ],
+    layout: 'stacked',
+  }),
+  p('classic-runge', '1/(1+25x^2)', [-1.2, 1.2], {
+    n: 21,
+    bands: [[-1, 1]],
+    epochs: 2000,
+    models: [
+      { hidden: [32, 32], act: 'tanh', lr: 1e-2 },
+      { model: { kind: 'poly', degree: 20 } },
+      { model: { kind: 'spline', segments: 12, smoothing: 0 } },
+      {
+        model: {
+          kind: 'gp',
+          kernel: [{ kind: 'rbf', scale: 1, length: 0.3, period: 1 }],
+          noise: 0.01,
+          tune: true,
+        },
+      },
     ],
   }),
   p('waves', 'sin(x) + 0.5 sin(2x) + (1/3) sin(3x)', [-10, 10], {

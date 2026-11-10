@@ -1,4 +1,5 @@
 // Messages between the page and a training worker. One worker hosts one run.
+import type { StageInfo } from '../classical/staged.ts';
 import type { ModelConfig } from '../config.ts';
 import type { Dataset } from '../data.ts';
 import type { RegionMetrics } from '../metrics.ts';
@@ -49,6 +50,10 @@ export interface FrameMsg {
   newTrainLoss: Float64Array;
   newValLoss: Float64Array;
   metrics: RegionMetrics;
+  /** Posterior std on the grid (Gaussian process; transferred). */
+  band?: Float32Array;
+  /** Build-up of a classical model. */
+  stage?: StageInfo;
   /** Smoothed training speed. */
   epochsPerSec: number;
   backend: Backend;

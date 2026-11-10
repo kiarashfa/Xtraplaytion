@@ -1,0 +1,71 @@
+---
+layout: ../../layouts/Lesson.astro
+title: Classical models out of range
+description: A polynomial, a Fourier series, a spline, a random forest, a Gaussian process and a neural network all fit the same data. Beyond it, each one guesses in its own way.
+n: 4
+minutes: 7
+---
+
+import LessonRace from '../../components/lesson/LessonRace.svelte';
+import { url as siteUrl } from '../../lib/url.ts';
+
+Neural networks are not the only way to fit a curve. Statisticians had good tools long before deep learning, and they are still everywhere. Inside the data, most of them do a fine job. The interesting question is what they do where there is no data at all.
+
+## The setup
+
+The target is `sin(x) + 0.3x`: a wave riding on a gentle slope. We only have noisy samples between −6 and 3. Everything to the left and right is beyond the data. Six models race:
+
+- **N1**, a ReLU network with two layers of 64 neurons, trained step by step.
+- **P2**, a polynomial of degree 9.
+- **F3**, a Fourier series with 8 harmonics.
+- **S4**, a smoothing spline.
+- **T5**, a random forest of 40 decision trees.
+- **G6**, a Gaussian process that tunes its own settings.
+
+The classical models fit in a moment. In the race they build up during the first quarter of the epochs (degree by degree, tree by tree), then hold their final fit while the network keeps learning.
+
+## Predict first
+
+<LessonRace
+  client:only="svelte"
+  preset="classic-beyond"
+  question="Beyond the data, which model stays closest to the true function?"
+  metric="beyond"
+  speed={8}
+/>
+
+## Six ways to guess
+
+Every model below fits the data well. What differs is the shape it assumes when the data runs out, and that shape comes from how the model is built, not from the data.
+
+- **The polynomial explodes.** A polynomial of degree 9 is ruled by its x⁹ term far from the middle. Just past the data it bends away and shoots off the chart, hundreds of units out. Higher degrees make it worse.
+- **The Fourier series repeats.** It is built from waves that all repeat after the same length, here the span of the data. So beyond the data it plays the data window again, as if the world were a loop.
+- **The spline goes straight.** A smoothing spline is made of smooth pieces between the data points. Past the last point it simply continues in a straight line with the slope it had at the edge.
+- **The forest goes flat.** Each tree cuts the line into flat steps, and nothing beyond the last data point can create a new step. The forest repeats the value at the edge forever.
+- **The Gaussian process returns to the average,** and it says so. Far from the data, its guess drifts back to the mean of what it has seen, while its shaded band grows to show that it is no longer sure.
+- **The ReLU network continues with straight lines,** a bit like the spline, because its pieces are linear. Which slope it picks depends on its training run.
+
+> Beyond the data, a model shows you its assumptions. None of them can know what happens there.
+
+## The model that knows it does not know
+
+Only the Gaussian process gives a band. Inside the data the band is thin: many points agree. Beyond the data it widens until it stops growing: there the model is back to what it believed before it saw any data. That is honest. A wide band is the right answer to a question the data cannot settle.
+
+## Too many bends, even inside
+
+Extrapolation is not the only danger. Here the target is `1/(1+25x²)`, a smooth bump named after Carl Runge, sampled at evenly spaced points. A polynomial of high degree passes close to every point, yet between the outermost points it swings wildly. More degree, more wiggles. The spline and the Gaussian process stay calm.
+
+<LessonRace
+  client:only="svelte"
+  preset="classic-runge"
+  question="Inside the data, which model stays closest to the smooth bump?"
+  metric="inside"
+  speed={8}
+/>
+
+## Try it yourself
+
+<a href={siteUrl('playground/#preset=classic-gap')}>Open the gap race in the playground</a>:
+classical models and a network try to fill a hole in the middle of a wave. Then change the Gaussian
+process kernel to Periodic and watch it repeat the wave beyond the data, or lower the polynomial
+degree and see the explosion shrink.

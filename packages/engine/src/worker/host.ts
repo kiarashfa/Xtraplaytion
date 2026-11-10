@@ -6,10 +6,10 @@
 // flight, messages that touch the run wait in a queue, and a reset or dispose
 // abandons the operation. If the GPU device is lost, training continues from the
 // last checkpoint on a new GPU device, or on the CPU when none is available.
-import type { ModelConfig } from '../config.ts';
+import type { MLPConfig } from '../config.ts';
 import type { Dataset } from '../data.ts';
 import { gpuUnsupported, type Checkpoint } from '../gpu/run.ts';
-import { createRun, type Frame } from '../run.ts';
+import { createRun, MLPRun, type Frame } from '../run.ts';
 import {
   MAX_IN_FLIGHT,
   type Backend,
@@ -44,7 +44,7 @@ export interface HostEnv {
   now(): number;
   /** Creates a GPU run, optionally resumed from a checkpoint. Absent when there is no WebGPU.
    *  Rejects with an Error whose message is a FallbackReason (or anything else: deviceError). */
-  gpu?(config: ModelConfig, data: Dataset, seed: number, from?: Checkpoint): Promise<GpuHandle>;
+  gpu?(config: MLPConfig, data: Dataset, seed: number, from?: Checkpoint): Promise<GpuHandle>;
 }
 
 type Init = Extract<ToWorker, { type: 'init' }>;
@@ -119,7 +119,12 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
         epochsPerSec: speed,
         backend,
       },
-      [fr.grid.buffer, newTrainLoss.buffer, newValLoss.buffer],
+      [
+        fr.grid.buffer,
+        newTrainLoss.buffer,
+        newValLoss.buffer,
+        ...(fr.band ? [fr.band.buffer] : []),
+      ],
     );
   };
 
@@ -282,8 +287,8 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
 
   const useCpu = (from?: Checkpoint | null) => {
     if (!init) return;
-    const r = createRun(init.config, init.data, init.seed);
-    if (from) r.restore(from);
+    const r = createRun(init.config, init.data, init.seed, init.epochs);
+    if (from && r instanceof MLPRun) r.restore(from);
     run = r;
     gpu = null;
     backend = 'cpu-f64';
@@ -300,9 +305,10 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
     old?.dispose();
     const g = gen;
     busy = true;
-    const attempt = env.gpu
-      ? env.gpu(cfg.config, cfg.data, cfg.seed, from ?? undefined)
-      : Promise.reject(new Error('noWebGPU'));
+    const attempt =
+      env.gpu && cfg.config.kind === 'mlp'
+        ? env.gpu(cfg.config, cfg.data, cfg.seed, from ?? undefined)
+        : Promise.reject(new Error('noWebGPU'));
     void attempt
       .then(
         (h) => {
@@ -346,7 +352,8 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
       ready(fallback);
       exec(sendFrame); // epoch 0: the untrained network
     };
-    if (choice === 'cpu') return onCpu();
+    // Classical models always fit on the CPU (exact); that is not a fallback.
+    if (choice === 'cpu' || cfg.config.kind !== 'mlp') return onCpu();
     if (gpuUnsupported(cfg.config)) return onCpu('unsupported');
     if (!env.gpu) return onCpu('noWebGPU');
     const g = gen;

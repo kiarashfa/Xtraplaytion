@@ -1,7 +1,9 @@
 // A training run: model + data + optimizer + history. Iterative and (later)
 // closed-form models all produce frames through this interface.
 import { Rng } from '@xtraplaytion/dmath';
-import type { ModelConfig } from './config.ts';
+import { makeFitter } from './classical/index.ts';
+import { StagedRun, type StageInfo } from './classical/staged.ts';
+import type { MLPConfig, ModelConfig } from './config.ts';
 import type { Dataset } from './data.ts';
 import { lossAndGrad, lossOnly } from './losses.ts';
 import { regionMetrics, type RegionMetrics } from './metrics.ts';
@@ -15,6 +17,10 @@ export interface Frame {
   /** Predictions on the dataset grid (f32 is plenty for drawing). */
   grid: Float32Array;
   metrics: RegionMetrics;
+  /** Posterior standard deviation on the grid (Gaussian process). */
+  band?: Float32Array;
+  /** Build-up of a classical model. */
+  stage?: StageInfo;
 }
 
 export interface Model {
@@ -41,11 +47,11 @@ export class MLPRun implements Model {
   private readonly gridOut: Float64Array;
   private readonly valOut: Float64Array;
 
-  readonly config: ModelConfig;
+  readonly config: MLPConfig;
   readonly data: Dataset;
   readonly seed: number;
 
-  constructor(config: ModelConfig, data: Dataset, seed: number) {
+  constructor(config: MLPConfig, data: Dataset, seed: number) {
     this.config = config;
     this.data = data;
     this.seed = seed;
@@ -167,6 +173,20 @@ export class MLPRun implements Model {
   }
 }
 
-export function createRun(config: ModelConfig, data: Dataset, seed: number): MLPRun {
-  return new MLPRun(config, data, seed);
+/** A network trains; a classical model builds up over the first quarter of `epochs`. */
+export function createRun(config: MLPConfig, data: Dataset, seed: number, epochs?: number): MLPRun;
+export function createRun(
+  config: ModelConfig,
+  data: Dataset,
+  seed: number,
+  epochs: number,
+): MLPRun | StagedRun;
+export function createRun(
+  config: ModelConfig,
+  data: Dataset,
+  seed: number,
+  epochs = 1,
+): MLPRun | StagedRun {
+  if (config.kind === 'mlp') return new MLPRun(config, data, seed);
+  return new StagedRun(config, data, seed, epochs, makeFitter);
 }

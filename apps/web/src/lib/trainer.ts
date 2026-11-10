@@ -7,7 +7,7 @@ import type {
   FallbackReason,
   FrameMsg,
   FromWorker,
-  MLPConfig,
+  ModelConfig,
   ReadyMsg,
   ToWorker,
 } from '@xtraplaytion/engine';
@@ -22,7 +22,7 @@ export interface TrainerEvents {
 }
 
 export interface StartOptions {
-  config: MLPConfig;
+  config: ModelConfig;
   data: Dataset;
   seed: number;
   epochs: number;

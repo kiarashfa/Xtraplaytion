@@ -6,10 +6,13 @@
     drawFit,
     fitLayout,
     invX,
+    invY,
     sx,
     type FitScene,
     type SceneTheme,
   } from '../../lib/scene/draw.ts';
+  import type { Dataset } from '@xtraplaytion/engine';
+  import { drawStroke, latticeFor, latticeOf } from '../../lib/source.ts';
   import { prepare, watchSize, watchTheme } from './canvas.ts';
   import { COLOR_CLASS } from './Swatch.svelte';
 
@@ -20,6 +23,7 @@
     short = false,
     tag,
     fixed = false,
+    drawing = false,
   }: {
     pg: Playground;
     /** The models drawn in this plot (all visible ones, or one when stacked). */
@@ -29,6 +33,8 @@
     tag?: string;
     /** No draggable range edges (lessons). */
     fixed?: boolean;
+    /** Strokes on the plot draw the target (the Draw tab is open). */
+    drawing?: boolean;
   } = $props();
   const t = useTranslations();
 
@@ -37,12 +43,15 @@
   let size = $state(0); // bumps on resize
   let drag = $state<{ bands: [number, number][]; edge: [number, number] } | null>(null);
   let hoverX = $state<number | null>(null);
+  let stroke = $state<{ x: number; y: number }[] | null>(null);
 
   const bands = $derived(drag ? drag.bands : pg.bands.slice().sort((a, b) => a[0] - b[0]));
   const yDomain = $derived(
-    pg.data
-      ? autoYDomain(pg.data.clean, pg.data.trainY, pg.data.valY)
-      : ([-1, 1] as [number, number]),
+    drawing && pg.drawY
+      ? pg.drawY
+      : pg.data
+        ? autoYDomain(pg.data.clean, pg.data.trainY, pg.data.valY, pg.data.test?.y ?? [])
+        : ([-1, 1] as [number, number]),
   );
 
   // Every model is shown at the same epoch (the shared clock, or the replay position).
@@ -53,8 +62,21 @@
     }),
   );
 
+  const EMPTY = new Float64Array(0);
+  // An empty canvas to draw on before anything is drawn.
+  const emptyData: Pick<
+    Dataset,
+    'trainX' | 'trainY' | 'valX' | 'valY' | 'gridX' | 'clean' | 'test'
+  > = {
+    trainX: EMPTY,
+    trainY: EMPTY,
+    valX: EMPTY,
+    valY: EMPTY,
+    gridX: EMPTY,
+    clean: EMPTY,
+  };
   function scene(w: number, h: number): FitScene | null {
-    const d = pg.data;
+    const d = pg.data ?? (drawing ? emptyData : null);
     if (!d) return null;
     return {
       width: w,
@@ -68,6 +90,9 @@
       valY: d.valY,
       gridX: d.gridX,
       truth: d.clean,
+      ...(d.test ? { testX: d.test.x, testY: d.test.y } : {}),
+      drawn: drawing,
+      ...(stroke ? { stroke } : {}),
       models: shown.map(({ run, frame }) => ({
         ys: frame.grid,
         color: run.spec.color,
@@ -126,12 +151,31 @@
   }
 
   function onDown(e: PointerEvent) {
-    if (fixed) return;
+    if (fixed || !canvas) return;
     const edge = hit(e);
-    if (!edge || !canvas) return;
+    if (edge) {
+      canvas.setPointerCapture(e.pointerId);
+      drag = { bands: bands.map((b) => [...b] as [number, number]), edge };
+      e.preventDefault();
+      return;
+    }
+    if (!drawing || e.button > 0) return;
+    if (!pg.drawY) pg.drawY = yDomain; // keep the scale while drawing
     canvas.setPointerCapture(e.pointerId);
-    drag = { bands: bands.map((b) => [...b] as [number, number]), edge };
+    hoverX = null;
+    stroke = [];
+    addPoint(e);
     e.preventDefault();
+  }
+
+  function addPoint(e: PointerEvent) {
+    if (!canvas || !stroke) return;
+    const s = scene(canvas.clientWidth, canvas.clientHeight);
+    if (!s) return;
+    const f = fitLayout(s);
+    const x = Math.min(pg.domain[1], Math.max(pg.domain[0], invX(f, e.offsetX)));
+    const y = Math.min(f.yDomain[1], Math.max(f.yDomain[0], invY(f, e.offsetY)));
+    stroke = [...stroke, { x, y }];
   }
 
   function onMove(e: PointerEvent) {
@@ -140,6 +184,10 @@
     if (!s) return;
     const f = fitLayout(s);
     const x = Math.min(pg.domain[1], Math.max(pg.domain[0], invX(f, e.offsetX)));
+    if (stroke) {
+      addPoint(e);
+      return;
+    }
     if (drag) {
       const [i, side] = drag.edge;
       const next = drag.bands.map((b) => [...b] as [number, number]);
@@ -157,6 +205,11 @@
     if (drag) {
       pg.bands = drag.bands;
       drag = null;
+    }
+    if (stroke) {
+      const old = pg.drawing;
+      pg.drawing = drawStroke(old, stroke, old ? latticeOf(old) : latticeFor(pg.domain));
+      stroke = null;
     }
   }
 
@@ -200,7 +253,7 @@
 <div class="relative" role="img" aria-label={t('pg.plot.label', { summary })}>
   <canvas
     bind:this={canvas}
-    class="block w-full touch-pan-y {short
+    class="block w-full {drawing ? 'touch-none' : 'touch-pan-y'} {short
       ? 'h-[210px]'
       : compact
         ? 'h-[300px]'

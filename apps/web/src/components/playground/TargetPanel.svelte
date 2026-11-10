@@ -1,13 +1,21 @@
 <script lang="ts">
   import { useTranslations, type MessageKey } from '../../i18n';
-  import type { NoiseKind, Playground } from '../../lib/playground.svelte.ts';
+  import type { NoiseKind, Playground, TargetTab } from '../../lib/playground.svelte.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import Icon from '../Icon.svelte';
   import Tex from '../Tex.svelte';
+  import DrawPanel from './DrawPanel.svelte';
+  import ImportPanel from './ImportPanel.svelte';
 
   const { pg }: { pg: Playground } = $props();
   const t = useTranslations();
-  let tab = $state<'formula' | 'presets'>('formula');
+  const tab = $derived(pg.targetTab);
+  const TABS: [TargetTab, MessageKey][] = [
+    ['formula', 'pg.tab.formula'],
+    ['presets', 'pg.tab.presets'],
+    ['draw', 'pg.tab.draw'],
+    ['data', 'pg.tab.data'],
+  ];
   const noiseKinds: NoiseKind[] = ['none', 'gaussian', 'uniform', 'outliers'];
 
   const errorText = $derived.by(() => {
@@ -39,21 +47,17 @@
     role="tablist"
     aria-label={t('pg.step.target')}
   >
-    {#each [['formula', 'pg.tab.formula'], ['presets', 'pg.tab.presets']] as const as [id, key] (id)}
+    {#each TABS as [id, key] (id)}
       <button
         type="button"
         role="tab"
         aria-selected={tab === id}
-        class="-mb-px min-h-11 border-b-2 px-2 text-[13px] font-semibold {tab === id
+        data-target-tab={id}
+        class="-mb-px min-h-11 border-b-2 px-2 text-[13px] font-semibold whitespace-nowrap {tab ===
+        id
           ? 'border-accent text-ink'
           : 'border-transparent text-muted'}"
-        onclick={() => (tab = id)}>{t(key)}</button
-      >
-    {/each}
-    {#each ['pg.tab.draw', 'pg.tab.data'] as const as key (key)}
-      <span
-        class="flex min-h-11 items-center px-2 text-[13px] font-semibold text-faint"
-        title={t('pg.soon')}>{t(key)}</span
+        onclick={() => pg.setTargetTab(id)}>{t(key)}</button
       >
     {/each}
   </div>
@@ -92,6 +96,10 @@
         {/if}
       {/if}
     </div>
+  {:else if tab === 'draw'}
+    <DrawPanel {pg} />
+  {:else if tab === 'data'}
+    <ImportPanel {pg} />
   {:else}
     <ul class="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto pe-1">
       {#each PRESETS as p (p.id)}
@@ -99,10 +107,7 @@
           <button
             type="button"
             class="flex min-h-11 w-full flex-col items-start rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-start hover:border-accent"
-            onclick={() => {
-              pg.applyPreset(p);
-              tab = 'formula';
-            }}
+            onclick={() => pg.applyPreset(p)}
           >
             <span class="text-[13px] font-semibold">{t(`preset.${p.id}.name` as MessageKey)}</span>
             <span class="font-mono text-[11.5px] text-muted">{p.expr}</span>
@@ -112,7 +117,7 @@
     </ul>
   {/if}
 
-  <div class="grid grid-cols-3 gap-2">
+  <div class="grid {tab === 'data' ? 'grid-cols-2' : 'grid-cols-3'} gap-2">
     <label class="flex flex-col gap-1"
       ><span class="xp-label">{t('pg.domain.from')}</span>
       <input
@@ -131,47 +136,47 @@
         onchange={(e) => (pg.domain = [pg.domain[0], num(e.currentTarget.value, pg.domain[1])])}
       />
     </label>
-    <label class="flex flex-col gap-1"
-      ><span class="xp-label">{t('pg.points')}</span>
-      <input
-        class="xp-input font-mono"
-        type="number"
-        min="2"
-        max="5000"
-        value={pg.n}
-        onchange={(e) => (pg.n = Math.round(num(e.currentTarget.value, pg.n)))}
-      />
-    </label>
+    {#if tab !== 'data'}<label class="flex flex-col gap-1"
+        ><span class="xp-label">{t('pg.points')}</span>
+        <input
+          class="xp-input font-mono"
+          type="number"
+          min="2"
+          max="5000"
+          value={pg.n}
+          onchange={(e) => (pg.n = Math.round(num(e.currentTarget.value, pg.n)))}
+        />
+      </label>{/if}
   </div>
 
-  <div class="grid grid-cols-[1fr_1.2fr] items-end gap-2">
-    <label class="flex flex-col gap-1">
-      <span class="xp-label">{t('pg.noise')}</span>
-      <select
-        class="xp-input"
-        value={pg.noiseKind}
-        onchange={(e) => (pg.noiseKind = e.currentTarget.value as NoiseKind)}
-      >
-        {#each noiseKinds as k (k)}<option value={k}>{t(`pg.noise.${k}`)}</option>{/each}
-      </select>
-    </label>
-    <label class="flex flex-col gap-1 {pg.noiseKind === 'none' ? 'opacity-50' : ''}">
-      <span class="xp-label"
-        >{t('pg.noise.amount')}
-        <span class="font-mono text-ink">σ {pg.sigma.toFixed(2)}</span></span
-      >
-      <input
-        type="range"
-        min="0"
-        max="0.5"
-        step="0.01"
-        class="h-9 w-full accent-[var(--xp-accent)]"
-        value={pg.sigma}
-        disabled={pg.noiseKind === 'none'}
-        oninput={(e) => (pg.sigma = Number(e.currentTarget.value))}
-      />
-    </label>
-  </div>
+  {#if tab !== 'data'}<div class="grid grid-cols-[1fr_1.2fr] items-end gap-2">
+      <label class="flex flex-col gap-1">
+        <span class="xp-label">{t('pg.noise')}</span>
+        <select
+          class="xp-input"
+          value={pg.noiseKind}
+          onchange={(e) => (pg.noiseKind = e.currentTarget.value as NoiseKind)}
+        >
+          {#each noiseKinds as k (k)}<option value={k}>{t(`pg.noise.${k}`)}</option>{/each}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 {pg.noiseKind === 'none' ? 'opacity-50' : ''}">
+        <span class="xp-label"
+          >{t('pg.noise.amount')}
+          <span class="font-mono text-ink">σ {pg.sigma.toFixed(2)}</span></span
+        >
+        <input
+          type="range"
+          min="0"
+          max="0.5"
+          step="0.01"
+          class="h-9 w-full accent-[var(--xp-accent)]"
+          value={pg.sigma}
+          disabled={pg.noiseKind === 'none'}
+          oninput={(e) => (pg.sigma = Number(e.currentTarget.value))}
+        />
+      </label>
+    </div>{/if}
   <div class="flex items-center justify-between gap-2">
     <span class="xp-label">{t('pg.seed')} <span class="font-mono text-ink">{pg.seed}</span></span>
     <button
@@ -179,7 +184,7 @@
       class="xp-btn min-h-9! px-3 text-[13px]"
       onclick={() => (pg.seed = (pg.seed * 1103515245 + 12345) % 100000)}
     >
-      <Icon name="dice" size={16} />{t('pg.newNoise')}
+      <Icon name="dice" size={16} />{t(tab === 'data' ? 'pg.newSplit' : 'pg.newNoise')}
     </button>
   </div>
 </div>

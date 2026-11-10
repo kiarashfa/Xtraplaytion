@@ -4,7 +4,7 @@
 // back per frame. Full batch only; minibatch and dropout train on the CPU.
 import { dimsOf, type MLPConfig, type ModelConfig } from '../config.ts';
 import type { Dataset } from '../data.ts';
-import { regionMetrics } from '../metrics.ts';
+import { scoreGrid } from '../metrics.ts';
 import { MLP } from '../mlp.ts';
 import type { Frame } from '../run.ts';
 import {
@@ -102,7 +102,6 @@ export class GpuRun {
   private readonly val: Dispatch[] = [];
   private readonly grid: Dispatch[] = [];
   private readonly pipes = new Map<string, GPUComputePipeline>();
-  private readonly cleanGrid: Float64Array;
   /** Grid prediction read back with the last training chunk (saves a round trip). */
   private cachedGrid: Float32Array | null = null;
   private cachedAt = -1;
@@ -119,7 +118,6 @@ export class GpuRun {
     this.config = config;
     this.data = data;
     this.seed = seed;
-    this.cleanGrid = data.clean;
     // Same initial weights as the CPU run (computed in f64, uploaded as f32).
     const cpu = new MLP(config, seed);
     this.paramCount = cpu.paramCount;
@@ -569,7 +567,7 @@ export class GpuRun {
       trainLoss: this.trainLoss.length ? this.trainLoss[this.trainLoss.length - 1] : NaN,
       valLoss: this.valLoss.length ? this.valLoss[this.valLoss.length - 1] : NaN,
       grid,
-      metrics: regionMetrics(grid, this.cleanGrid, this.data.region),
+      metrics: scoreGrid(grid, this.data),
     };
   }
 

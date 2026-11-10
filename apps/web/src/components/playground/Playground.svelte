@@ -10,7 +10,8 @@
   } from '../../lib/capability.ts';
   import { modelName, Playground } from '../../lib/playground.svelte.ts';
   import { PRESETS } from '../../lib/presets.ts';
-  import { decodeState, encodeState } from '../../lib/share.ts';
+  import { getEntry, getResults } from '../../lib/library.ts';
+  import { decodeState } from '../../lib/share.ts';
   import Icon from '../Icon.svelte';
   import Tex from '../Tex.svelte';
   import DataPanel from './DataPanel.svelte';
@@ -54,8 +55,22 @@
     const fromHash = async () => {
       const params = new URLSearchParams(location.hash.slice(1));
       const code = params.get('s');
+      const lib = params.get('lib');
       const preset = PRESETS.find((p) => p.id === params.get('preset'));
       if (preset) pg.applyPreset(preset);
+      if (lib) {
+        try {
+          const entry = await getEntry(lib);
+          if (!entry) say(t('pg.lib.missing'));
+          else {
+            const rec = entry.resultBytes ? await getResults(lib) : null;
+            pg.openSaved({ id: entry.id, name: entry.name, rec }, entry.state);
+            say(t('pg.lib.opened', { name: entry.name }));
+          }
+        } catch {
+          say(t('pg.lib.unavailable'));
+        }
+      }
       if (code) {
         const s = await decodeState(code);
         if (s) {
@@ -114,17 +129,6 @@
     const id = setTimeout(() => pg.restart(), 120);
     return () => clearTimeout(id);
   });
-
-  async function share() {
-    const code = await encodeState(pg.snapshotState());
-    history.replaceState(null, '', `#s=${code}`);
-    try {
-      await navigator.clipboard.writeText(location.href);
-      say(t('pg.share.copied'));
-    } catch {
-      say(t('pg.share.failed'));
-    }
-  }
 
   const diverged = $derived(
     pg.runs
@@ -186,6 +190,8 @@
     return best;
   });
   const stacked = $derived(pg.layout === 'stacked' && pg.visibleRuns.length > 1);
+  // Strokes on the plot draw while the Draw tab is open (and visible, on phones).
+  const drawActive = $derived(pg.targetTab === 'draw' && (!mobile || tab === 'target'));
 </script>
 
 <div
@@ -294,7 +300,7 @@
   </aside>
 
   <div class="order-1 flex min-w-0 flex-col gap-3 p-2.5 sm:p-3.5 md:order-2">
-    <RunBar {pg} onshare={share} compact={mobile} />
+    <RunBar {pg} {say} compact={mobile} />
 
     {#if pg.mode === 'recorded'}
       <div
@@ -303,10 +309,12 @@
         data-recorded-notice
       >
         <Icon name="info" /><span class="min-w-0 flex-1"
-          >{t('pg.recorded.notice', { time: formatDuration(pg.estimateTotal) })}</span
+          >{pg.recordedKind === 'saved'
+            ? t('pg.saved.notice', { name: pg.saved?.name ?? '' })
+            : t('pg.recorded.notice', { time: formatDuration(pg.estimateTotal) })}</span
         >
         <button type="button" class="xp-btn min-h-10" onclick={() => pg.trainLive()}
-          >{t('pg.recorded.live')}</button
+          >{pg.recordedKind === 'saved' ? t('pg.saved.again') : t('pg.recorded.live')}</button
         >
       </div>
     {/if}
@@ -337,8 +345,11 @@
     <section class="xp-card" aria-labelledby="fit-title">
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 pt-2.5">
         <h2 id="fit-title" class="text-sm font-bold">{t('pg.fit')}</h2>
-        {#if pg.parsed.ok && !mobile}<span class="text-faint" aria-hidden="true">·</span><span
-            class="min-w-0 truncate text-[15px]"><Tex tex={`f(x)=${pg.parsed.latex}`} /></span
+        {#if pg.targetKind !== 'formula'}<span class="text-faint" aria-hidden="true">·</span><span
+            class="min-w-0 truncate text-[13px] text-muted"
+            >{t(pg.targetKind === 'drawn' ? 'pg.fit.drawn' : 'pg.fit.points')}</span
+          >{:else if pg.parsed.ok && !mobile}<span class="text-faint" aria-hidden="true">·</span
+          ><span class="min-w-0 truncate text-[15px]"><Tex tex={`f(x)=${pg.parsed.latex}`} /></span
           >{/if}
         <ul class="ms-auto flex flex-wrap gap-1.5 text-[12.5px]" aria-label="Legend">
           <li
@@ -346,13 +357,25 @@
           >
             <span class="size-2 rounded-full bg-target"></span>{t('pg.legend.data')}
           </li>
-          <li
-            class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
-          >
-            <span class="w-4 border-t-2 border-dotted border-[var(--xp-truth)]"></span>{t(
-              'pg.legend.truth',
-            )}
-          </li>
+          {#if pg.targetKind === 'points'}
+            <li
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
+            >
+              <span class="text-[13px] leading-none text-muted" aria-hidden="true">×</span>{t(
+                'pg.legend.heldOut',
+              )}
+            </li>
+          {:else}
+            <li
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
+            >
+              <span
+                class="w-4 border-t-2 {pg.targetKind === 'drawn'
+                  ? 'border-solid'
+                  : 'border-dotted'} border-[var(--xp-truth)]"
+              ></span>{t(pg.targetKind === 'drawn' ? 'pg.legend.drawing' : 'pg.legend.truth')}
+            </li>
+          {/if}
           {#each pg.models.filter((m) => m.visible) as m (m.id)}
             <li
               class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
@@ -391,12 +414,19 @@
       {#if stacked}
         <div class="flex flex-col gap-1 px-1.5 pt-1 pb-2 sm:px-2">
           {#each pg.visibleRuns as r (r.spec.id)}
-            <FitPlot {pg} runs={[r]} compact={mobile} short tag={modelName(r.spec)} />
+            <FitPlot
+              {pg}
+              runs={[r]}
+              compact={mobile}
+              short
+              tag={modelName(r.spec)}
+              drawing={drawActive}
+            />
           {/each}
         </div>
       {:else}
         <div class="px-1.5 pt-1 pb-2 sm:px-2">
-          <FitPlot {pg} runs={pg.visibleRuns} compact={mobile} />
+          <FitPlot {pg} runs={pg.visibleRuns} compact={mobile} drawing={drawActive} />
         </div>
       {/if}
       <Scrubber {pg} />
@@ -414,7 +444,11 @@
       <section class="xp-card" aria-labelledby="score-title">
         <div class="flex flex-wrap items-baseline gap-x-2 px-3.5 pt-2.5">
           <h2 id="score-title" class="text-sm font-bold">{t('pg.score')}</h2>
-          <span class="text-xs text-faint">{t('pg.score.legend')}</span>
+          <span class="text-xs text-faint"
+            >{t(
+              pg.targetKind === 'formula' ? 'pg.score.legend' : `pg.score.legend.${pg.targetKind}`,
+            )}</span
+          >
         </div>
         <div class="p-1.5"><Leaderboard {pg} /></div>
       </section>

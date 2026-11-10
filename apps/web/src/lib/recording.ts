@@ -6,6 +6,10 @@
 //     f32 trainLoss[epochs] | f32 valLoss[epochs] | u32 frameEpochs[frames] |
 //     u16 grid[frames x gridSize], quantized to the model's [lo, hi] (65535 = no value)
 //     and stored as differences from the previous frame (wrapping), which compress well.
+//     Version 2 adds, per model when present: u16 band[frames x gridSize] (Gaussian process
+//     std, same scheme with its own range), build-up stages and the backend (header).
+// Saved experiments in the library use the same format.
+import type { Backend, StageInfo } from '@xtraplaytion/engine';
 import type { ExperimentState } from './share.ts';
 
 export interface RecordedModel {
@@ -16,6 +20,12 @@ export interface RecordedModel {
   /** One grid prediction per stored frame. */
   grids: Float32Array[];
   diverged: boolean;
+  /** Posterior std per stored frame (Gaussian process). */
+  bands?: Float32Array[];
+  /** Build-up stage per stored frame (classical models). */
+  stages?: (StageInfo | null)[];
+  /** Where this model trained (saved races can mix). */
+  backend?: Backend;
 }
 
 export interface Recording {
@@ -30,16 +40,44 @@ export interface Recording {
   models: RecordedModel[];
 }
 
+interface ModelHeader {
+  epochs: number;
+  frames: number;
+  lo: number;
+  hi: number;
+  diverged: boolean;
+  band?: { lo: number; hi: number };
+  stages?: (StageInfo | null)[];
+  backend?: Backend;
+}
+
 interface Header {
-  v: 1;
+  v: 1 | 2;
   key: string;
   state: ExperimentState;
   backend: Recording['backend'];
   adapter: string;
   created: string;
   gridSize: number;
-  models: { epochs: number; frames: number; lo: number; hi: number; diverged: boolean }[];
+  models: ModelHeader[];
 }
+
+function rangeOf(grids: Float32Array[]): { lo: number; hi: number } {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const g of grids)
+    for (const v of g)
+      if (Number.isFinite(v)) {
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+  if (!(hi >= lo)) [lo, hi] = [0, 1];
+  if (hi === lo) hi = lo + 1;
+  return { lo, hi };
+}
+
+/** Current time as an ISO string (recording and library timestamps). */
+export const isoNow = () => new Date().toISOString();
 
 const MAGIC = 0x31525058; // "XPR1" little-endian
 const NONE = 65535;
@@ -49,40 +87,36 @@ const MAX_BYTES = 64 * 1024 * 1024;
 
 export function encodeRecording(r: Recording): Uint8Array {
   const models = r.models.map((m) => {
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const g of m.grids)
-      for (const v of g)
-        if (Number.isFinite(v)) {
-          if (v < lo) lo = v;
-          if (v > hi) hi = v;
-        }
-    if (!(hi >= lo)) [lo, hi] = [0, 1];
-    if (hi === lo) hi = lo + 1;
-    return { m, lo, hi };
+    const { lo, hi } = rangeOf(m.grids);
+    const band = m.bands?.length === m.grids.length ? rangeOf(m.bands) : null;
+    return { m, lo, hi, band };
   });
   const header: Header = {
-    v: 1,
+    v: 2,
     key: r.key,
     state: r.state,
     backend: r.backend,
     adapter: r.adapter,
     created: r.created,
     gridSize: r.gridSize,
-    models: models.map(({ m, lo, hi }) => ({
+    models: models.map(({ m, lo, hi, band }) => ({
       epochs: m.trainLoss.length,
       frames: m.grids.length,
       lo,
       hi,
       diverged: m.diverged,
+      ...(band ? { band } : {}),
+      ...(m.stages?.some((st) => st) ? { stages: m.stages } : {}),
+      ...(m.backend ? { backend: m.backend } : {}),
     })),
   };
   const json = new TextEncoder().encode(JSON.stringify(header));
   const hdr = Math.ceil(json.length / 4) * 4;
   let size = 8 + hdr;
-  for (const { m } of models) {
+  for (const { m, band } of models) {
     size += 8 * m.trainLoss.length + 4 * m.grids.length;
     size += Math.ceil((2 * m.grids.length * r.gridSize) / 4) * 4;
+    if (band) size += Math.ceil((2 * m.grids.length * r.gridSize) / 4) * 4;
   }
   const buf = new ArrayBuffer(size);
   const dv = new DataView(buf);
@@ -93,16 +127,10 @@ export function encodeRecording(r: Recording): Uint8Array {
   const f32 = (a: ArrayLike<number>) => {
     for (let i = 0; i < a.length; i++, at += 4) dv.setFloat32(at, a[i], true);
   };
-  for (const { m, lo, hi } of models) {
-    f32(m.trainLoss);
-    f32(m.valLoss);
-    for (const e of m.frameEpochs) {
-      dv.setUint32(at, e, true);
-      at += 4;
-    }
+  const u16 = (grids: Float32Array[], lo: number, hi: number) => {
     const prev = new Uint16Array(r.gridSize);
     const span = hi - lo;
-    for (const g of m.grids) {
+    for (const g of grids) {
       for (let i = 0; i < r.gridSize; i++, at += 2) {
         const v = g[i];
         const q = Number.isFinite(v) ? Math.round(((v - lo) / span) * LEVELS) : NONE;
@@ -111,6 +139,16 @@ export function encodeRecording(r: Recording): Uint8Array {
       }
     }
     at = Math.ceil(at / 4) * 4;
+  };
+  for (const { m, lo, hi, band } of models) {
+    f32(m.trainLoss);
+    f32(m.valLoss);
+    for (const e of m.frameEpochs) {
+      dv.setUint32(at, e, true);
+      at += 4;
+    }
+    u16(m.grids, lo, hi);
+    if (band && m.bands) u16(m.bands, band.lo, band.hi);
   }
   return new Uint8Array(buf);
 }
@@ -121,7 +159,8 @@ export function decodeRecording(bytes: Uint8Array): Recording {
   const len = dv.getUint32(4, true);
   if (8 + len > bytes.byteLength) throw new Error('truncated recording');
   const h = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + len))) as Header;
-  if (h.v !== 1 || !Array.isArray(h.models)) throw new Error('unknown recording version');
+  if ((h.v !== 1 && h.v !== 2) || !Array.isArray(h.models))
+    throw new Error('unknown recording version');
   let at = 8 + Math.ceil(len / 4) * 4;
   const need = (n: number) => {
     if (at + n > bytes.byteLength) throw new Error('truncated recording');
@@ -138,21 +177,35 @@ export function decodeRecording(bytes: Uint8Array): Recording {
     need(4 * mh.frames);
     const frameEpochs = new Uint32Array(mh.frames);
     for (let i = 0; i < mh.frames; i++, at += 4) frameEpochs[i] = dv.getUint32(at, true);
-    need(2 * mh.frames * h.gridSize);
-    const prev = new Uint16Array(h.gridSize);
-    const step = (mh.hi - mh.lo) / LEVELS;
-    const grids: Float32Array[] = [];
-    for (let f = 0; f < mh.frames; f++) {
-      const g = new Float32Array(h.gridSize);
-      for (let i = 0; i < h.gridSize; i++, at += 2) {
-        const q = (prev[i] + dv.getUint16(at, true)) & 0xffff;
-        prev[i] = q;
-        g[i] = q === NONE ? NaN : mh.lo + q * step;
+    const u16 = (lo: number, hi: number) => {
+      need(2 * mh.frames * h.gridSize);
+      const prev = new Uint16Array(h.gridSize);
+      const step = (hi - lo) / LEVELS;
+      const out: Float32Array[] = [];
+      for (let f = 0; f < mh.frames; f++) {
+        const g = new Float32Array(h.gridSize);
+        for (let i = 0; i < h.gridSize; i++, at += 2) {
+          const q = (prev[i] + dv.getUint16(at, true)) & 0xffff;
+          prev[i] = q;
+          g[i] = q === NONE ? NaN : lo + q * step;
+        }
+        out.push(g);
       }
-      grids.push(g);
-    }
-    at = Math.ceil(at / 4) * 4;
-    return { trainLoss, valLoss, frameEpochs, grids, diverged: mh.diverged };
+      at = Math.ceil(at / 4) * 4;
+      return out;
+    };
+    const grids = u16(mh.lo, mh.hi);
+    const bands = mh.band ? u16(mh.band.lo, mh.band.hi) : undefined;
+    return {
+      trainLoss,
+      valLoss,
+      frameEpochs,
+      grids,
+      diverged: mh.diverged,
+      ...(bands ? { bands } : {}),
+      ...(Array.isArray(mh.stages) && mh.stages.length === mh.frames ? { stages: mh.stages } : {}),
+      ...(mh.backend === 'webgpu' || mh.backend === 'cpu-f64' ? { backend: mh.backend } : {}),
+    };
   });
   return {
     key: h.key,

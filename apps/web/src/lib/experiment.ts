@@ -1,9 +1,16 @@
 // An experiment as plain data: dataset construction and identity, shared by the
 // playground, presets and the recorded-run generator (no Svelte, no DOM).
-import { buildDataset, mlp, type Dataset, type Noise } from '@xtraplaytion/engine';
+import {
+  buildDataset,
+  datasetFromPoints,
+  mlp,
+  type Dataset,
+  type Noise,
+} from '@xtraplaytion/engine';
 import { compile, parse } from '@xtraplaytion/expr';
 import type { Preset } from './presets.ts';
 import { LIMITS, STATE_VERSION, type ExperimentState } from './share.ts';
+import { drawnFunction, type DataSource } from './source.ts';
 
 /** Points on the evaluation grid (plots, metrics, recordings). */
 export const GRID_SIZE = 512;
@@ -31,9 +38,36 @@ export function datasetFor(fn: (x: number) => number, d: DataInputs): Dataset | 
   });
 }
 
+/** Dataset of imported points (the noise and point count do not apply). */
+export function datasetForPoints(
+  src: { xs: number[]; ys: number[] },
+  d: Pick<DataInputs, 'domain' | 'bands' | 'valFraction' | 'seed'>,
+): Dataset | null {
+  const [a, b] = d.domain;
+  if (!(b > a)) return null;
+  return datasetFromPoints(src.xs, src.ys, {
+    domain: [a, b],
+    bands: d.bands,
+    valFraction: d.valFraction,
+    seed: d.seed,
+    gridSize: GRID_SIZE,
+  });
+}
+
+/** Dataset of any target: formula, drawing or imported points. */
+export function datasetFrom(
+  expr: string,
+  source: DataSource | undefined | null,
+  d: DataInputs,
+): Dataset | null {
+  if (source?.kind === 'points') return datasetForPoints(source, d);
+  if (source?.kind === 'drawn') return datasetFor(drawnFunction(source), d);
+  const parsed = parse(expr);
+  return parsed.ok ? datasetFor(compile(parsed.expr), d) : null;
+}
+
 export function datasetOf(s: ExperimentState): Dataset | null {
-  const parsed = parse(s.expr);
-  return parsed.ok ? datasetFor(compile(parsed.expr), s) : null;
+  return datasetFrom(s.expr, s.source, s);
 }
 
 /** Default data seed and validation share of the playground. */
@@ -85,5 +119,7 @@ export function trainingIdentity(s: ExperimentState): string {
     s.bands,
     s.epochs,
     s.models.map((m) => [m.model, m.seed]),
+    // Appended only when present, so formula experiments keep their identity.
+    ...(s.source ? [s.source] : []),
   ]);
 }

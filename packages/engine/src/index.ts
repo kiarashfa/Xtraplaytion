@@ -3,15 +3,18 @@ export { ACTIVATIONS, RELU_LIKE } from './activations.ts';
 export * from './config.ts';
 export {
   buildDataset,
+  datasetFromPoints,
   regionOf,
   spreadPoints,
   Region,
   type DataSpec,
+  type PointsSpec,
   type Dataset,
   type Noise,
 } from './data.ts';
 export { lossAndGrad, lossOnly } from './losses.ts';
-export { regionMetrics, type RegionMetrics } from './metrics.ts';
+export { scaleData, unscaleGrid, unscaleLoss } from './scale.ts';
+export { regionMetrics, scoreGrid, type RegionMetrics } from './metrics.ts';
 export { MLP, type LayerView } from './mlp.ts';
 export { lrAt, Optimizer } from './optim.ts';
 export { createRun, MLPRun, type Frame, type Model } from './run.ts';

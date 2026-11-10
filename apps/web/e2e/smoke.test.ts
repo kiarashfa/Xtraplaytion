@@ -30,6 +30,21 @@ describe.each(targets)('$name', (target) => {
     await page.goto('./');
     await hydrated(page);
     const theme = () => page.getAttribute('html', 'data-theme');
+    const cycle = page.locator('[data-theme-cycle]');
+    if (await cycle.isVisible()) {
+      // Phones: one button steps through System, Light, Dark.
+      await cycle.click();
+      expect(await theme()).toBe('light');
+      await cycle.click();
+      expect(await theme()).toBe('dark');
+      await page.reload();
+      await hydrated(page);
+      expect(await theme()).toBe('dark');
+      expect(await cycle.getAttribute('aria-label')).toContain('Dark');
+      expect(problems).toEqual([]);
+      await context.close();
+      return;
+    }
     await page.getByRole('radio', { name: 'Dark' }).check({ force: true });
     expect(await theme()).toBe('dark');
     await page.reload();

@@ -67,6 +67,16 @@ export interface MLPConfig {
   batch: BatchConfig;
   /** Dropout probability after each hidden activation, training only. */
   dropout: number;
+  /** Train on rescaled inputs and targets (see scale.ts); absent means raw values. */
+  scale?: Scaling;
+}
+
+/** x' = (x - xShift) * xScale, y' = (y - yShift) * yScale. */
+export interface Scaling {
+  xShift: number;
+  xScale: number;
+  yShift: number;
+  yScale: number;
 }
 
 // ---- Classical models. They fit in closed form (or by a short inner optimization) and

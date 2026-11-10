@@ -10,6 +10,8 @@ import type { MLPConfig } from '../config.ts';
 import type { Dataset } from '../data.ts';
 import { gpuUnsupported, type Checkpoint } from '../gpu/run.ts';
 import { createRun, MLPRun, type Frame } from '../run.ts';
+import { scoreGrid } from '../metrics.ts';
+import { scaleData, unscaleGrid, unscaleLoss } from '../scale.ts';
 import {
   MAX_IN_FLIGHT,
   type Backend,
@@ -91,6 +93,8 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
   let op = 0;
   let busy = false;
   let queue: ToWorker[] = [];
+  /** Original-unit data when the network trains on rescaled values. */
+  let original: Dataset | null = null;
 
   const fail = (e: unknown) =>
     env.post(
@@ -102,10 +106,26 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
       [],
     );
 
-  const post = (fr: Frame) => {
+  const post = (raw: Frame) => {
     if (!run || !init) return;
-    const newTrainLoss = Float64Array.from(run.trainLoss.slice(sentLosses));
-    const newValLoss = Float64Array.from(run.valLoss.slice(sentLosses));
+    let fr = raw;
+    let newTrainLoss = Float64Array.from(run.trainLoss.slice(sentLosses));
+    let newValLoss = Float64Array.from(run.valLoss.slice(sentLosses));
+    const sc = init.config.kind === 'mlp' ? init.config.scale : undefined;
+    if (sc && original && init.config.kind === 'mlp') {
+      const kind = init.config.loss.kind;
+      const back = (v: number) => unscaleLoss(v, sc, kind);
+      const grid = unscaleGrid(raw.grid, sc);
+      fr = {
+        ...raw,
+        grid,
+        trainLoss: back(raw.trainLoss),
+        valLoss: back(raw.valLoss),
+        metrics: scoreGrid(grid, original),
+      };
+      newTrainLoss = newTrainLoss.map(back);
+      newValLoss = newValLoss.map(back);
+    }
     sentLosses = run.trainLoss.length;
     seq++;
     env.post(
@@ -382,12 +402,16 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
   function handle(msg: ToWorker): void {
     try {
       switch (msg.type) {
-        case 'init':
-          init = msg;
+        case 'init': {
+          // A network on rescaled values trains on scaled data; frames are mapped back.
+          const sc = msg.config.kind === 'mlp' ? msg.config.scale : undefined;
+          original = sc ? msg.data : null;
+          init = sc ? { ...msg, data: scaleData(msg.data, sc) } : msg;
           epochsPerFrame = Math.max(1, Math.floor(msg.epochsPerFrame));
           playing = false;
           start();
           return;
+        }
         case 'reset':
           playing = false;
           start();

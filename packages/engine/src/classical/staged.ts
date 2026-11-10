@@ -6,7 +6,7 @@
 // networks.
 import type { ClassicalConfig } from '../config.ts';
 import type { Dataset } from '../data.ts';
-import { regionMetrics } from '../metrics.ts';
+import { scoreGrid } from '../metrics.ts';
 import type { Frame } from '../run.ts';
 
 /** One fitted stage. */
@@ -141,7 +141,7 @@ export class StagedRun {
   frame(): Frame {
     const s = this.stageAt(this.ep);
     const st = this.ensure(s);
-    const { gridX, clean, region } = this.data;
+    const { gridX } = this.data;
     if (this.gridAt !== s) {
       st.predict(gridX, this.gridOut);
       if (st.std) st.std(gridX, this.stdOut);
@@ -153,7 +153,7 @@ export class StagedRun {
       trainLoss: n ? this.trainLoss[n - 1] : NaN,
       valLoss: n ? this.valLoss[n - 1] : NaN,
       grid: Float32Array.from(this.gridOut),
-      metrics: regionMetrics(this.gridOut, clean, region),
+      metrics: scoreGrid(this.gridOut, this.data),
       ...(st.std ? { band: Float32Array.from(this.stdOut) } : {}),
       stage: { at: s, of: this.fitter.stages, value: st.value, params: st.params },
     };

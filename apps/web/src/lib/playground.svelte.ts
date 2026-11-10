@@ -6,7 +6,7 @@
 import {
   mlp,
   paramCountOf,
-  regionMetrics,
+  scoreGrid,
   type Activation,
   type Backend,
   type BackendChoice,
@@ -18,6 +18,7 @@ import {
   type ModelConfig,
   type Noise,
   type OptimizerKind,
+  type Scaling,
 } from '@xtraplaytion/engine';
 import { compile, parse, sample } from '@xtraplaytion/expr';
 import {
@@ -28,19 +29,34 @@ import {
   webgpuPresent,
   type GpuSpeed,
 } from './capability.ts';
-import { datasetFor, presetState, trainingIdentity } from './experiment.ts';
+import { datasetFrom, GRID_SIZE, presetState, trainingIdentity } from './experiment.ts';
 import { FrameHistory, type StoredFrame } from './history.ts';
 import { classicalSeconds, defaultClassical, LETTER, type Family } from './models.ts';
 import type { Preset } from './presets.ts';
-import { loadRecording, type Recording, type RecordedModel } from './recording.ts';
+import { isoNow, loadRecording, type Recording, type RecordedModel } from './recording.ts';
 import { recordingUrl } from './recordings.ts';
 import { LIMITS, STATE_VERSION, type ExperimentState } from './share.ts';
+import { autoYDomain } from './scene/draw.ts';
+import {
+  drawnFunction,
+  pointsLayout,
+  type DataSource,
+  type DrawnSource,
+  type PointsSource,
+} from './source.ts';
 import { Trainer } from './trainer.ts';
 
 export type Status = 'ready' | 'running' | 'paused' | 'done' | 'diverged' | 'error';
 export type RunStatus = 'queued' | 'ready' | 'running' | 'paused' | 'done' | 'diverged' | 'error';
 export type NoiseKind = 'none' | 'gaussian' | 'uniform' | 'outliers';
 export type Layout = 'overlay' | 'stacked';
+export type TargetTab = 'formula' | 'presets' | 'draw' | 'data';
+/** A library entry the playground was opened from. */
+export interface SavedRef {
+  id: string;
+  name: string;
+  rec: Recording | null;
+}
 
 export const ACTIVATIONS: Activation[] = [
   'relu',
@@ -204,17 +220,38 @@ export class ModelRun {
   final = 0;
   recordedDiverged = false;
 
+  /** This run as a recorded model (for saving to the library). */
+  toRecorded(): RecordedModel {
+    const frames = this.history.frames;
+    const hasBand = frames.length > 0 && frames.every((f) => f.band);
+    const n = this.trainer.trainLoss.length;
+    return {
+      trainLoss: Float32Array.from(this.trainer.trainLoss.view().subarray(0, n)),
+      valLoss: Float32Array.from(this.trainer.valLoss.view().subarray(0, n)),
+      frameEpochs: Uint32Array.from(frames, (f) => f.epoch),
+      grids: frames.map((f) => f.grid),
+      diverged: this.status === 'diverged',
+      ...(hasBand ? { bands: frames.map((f) => f.band ?? new Float32Array(0)) } : {}),
+      ...(frames.some((f) => f.stage) ? { stages: frames.map((f) => f.stage ?? null) } : {}),
+      ...(this.backend ? { backend: this.backend } : {}),
+    };
+  }
+
   /** Fills the history from a recording (no worker). Playback then moves `latest`. */
   loadRecorded(m: RecordedModel, data: Dataset, backend: Backend) {
     this.history.clear();
     m.grids.forEach((grid, i) => {
       const epoch = m.frameEpochs[i];
+      const band = m.bands?.[i];
+      const stage = m.stages?.[i];
       this.history.add({
         epoch,
         grid,
-        metrics: regionMetrics(grid, data.clean, data.region),
+        metrics: scoreGrid(grid, data),
         trainLoss: epoch > 0 ? m.trainLoss[epoch - 1] : NaN,
         valLoss: epoch > 0 ? m.valLoss[epoch - 1] : NaN,
+        ...(band ? { band } : {}),
+        ...(stage ? { stage } : {}),
       });
     });
     this.trainer.trainLoss.clear();
@@ -258,6 +295,19 @@ const defaultNet = (color: number, seed: number) =>
 export class Playground {
   // ---- target and data
   expr = $state('sin(x) + 0.5 sin(2x) + (1/3) sin(3x)');
+  /** Open tab of the target panel. It decides the target: the formula (Formula and Presets),
+   *  the drawing (Draw) or the imported points (Your data). The others are kept, so going
+   *  back to a tab restores what was there. */
+  targetTab = $state<TargetTab>('formula');
+  drawing = $state.raw<DrawnSource | null>(null);
+  imported = $state.raw<PointsSource | null>(null);
+  /** Where imported points came from (file name), shown in the panel. */
+  importedName = $state('');
+  /** y range kept fixed while drawing, so the plot does not rescale under the pen. */
+  drawY = $state<[number, number] | null>(null);
+  source = $derived<DataSource | null>(
+    this.targetTab === 'draw' ? this.drawing : this.targetTab === 'data' ? this.imported : null,
+  );
   domain = $state<[number, number]>([-10, 10]);
   n = $state(200);
   noiseKind = $state<NoiseKind>('gaussian');
@@ -316,10 +366,23 @@ export class Playground {
   private loadingRecording: string | null = null;
   /** 'recorded' while the race on screen plays a recording. */
   mode = $state<'live' | 'recorded'>('live');
+  /** The library entry this experiment was opened from (its saved results play first). */
+  saved = $state.raw<SavedRef | null>(null);
+  /** What the recorded race on screen is: a preset's recording or saved results. */
+  recordedKind = $state<'preset' | 'saved'>('preset');
   private lastTick = 0;
 
   parsed = $derived(parse(this.expr));
-  fn = $derived(this.parsed.ok ? compile(this.parsed.expr) : null);
+  /** The true function, when there is one (formula or drawing). */
+  fn = $derived.by((): ((x: number) => number) | null => {
+    if (this.source?.kind === 'drawn') return drawnFunction(this.source);
+    if (this.source?.kind === 'points') return null;
+    return this.parsed.ok ? compile(this.parsed.expr) : null;
+  });
+  /** What the target is right now. */
+  targetKind = $derived<'formula' | 'drawn' | 'points'>(
+    this.targetTab === 'draw' ? 'drawn' : this.targetTab === 'data' ? 'points' : 'formula',
+  );
 
   noise = $derived.by((): Noise => {
     switch (this.noiseKind) {
@@ -335,9 +398,8 @@ export class Playground {
   });
 
   data = $derived.by((): Dataset | null => {
-    const f = this.fn;
-    if (!f) return null;
-    return datasetFor(f, {
+    if (this.targetKind !== 'formula' && !this.source) return null; // nothing drawn or imported yet
+    return datasetFrom(this.expr, this.source, {
       domain: this.domain,
       n: this.n,
       bands: $state.snapshot(this.bands) as [number, number][],
@@ -347,7 +409,37 @@ export class Playground {
     });
   });
 
-  invalidPoints = $derived(this.fn && this.data ? sample(this.fn, this.data.gridX).invalid : 0);
+  /** Networks train on rescaled values when the target is imported data (x: the plot range
+   *  maps to [-1, 1]; y: standardized with the data inside the training ranges). */
+  netScale = $derived.by((): Scaling | undefined => {
+    const d = this.data;
+    if (this.targetKind !== 'points' || !d) return undefined;
+    const ys = [...d.trainY, ...d.valY];
+    if (ys.length < 2) return undefined;
+    const mean = ys.reduce((a, v) => a + v, 0) / ys.length;
+    const sd = Math.sqrt(ys.reduce((a, v) => a + (v - mean) ** 2, 0) / ys.length);
+    const [a, b] = this.domain;
+    const r = (v: number) => +v.toPrecision(6);
+    return {
+      xShift: r((a + b) / 2),
+      xScale: r(2 / (b - a)),
+      yShift: r(mean),
+      yScale: r(sd > 0 ? 1 / sd : 1),
+    };
+  });
+
+  /** Configuration a model trains with (networks on imported data get the scaling). */
+  configOf(m: ModelSpec): ModelConfig {
+    const cfg = specConfig(m);
+    const sc = this.netScale;
+    return cfg.kind === 'mlp' && sc ? { ...cfg, scale: sc } : cfg;
+  }
+
+  invalidPoints = $derived(
+    this.targetKind === 'formula' && this.fn && this.data
+      ? sample(this.fn, this.data.gridX).invalid
+      : 0,
+  );
 
   /** Changes that require retraining (visibility and layout do not). */
   trainingKey = $derived(
@@ -415,8 +507,11 @@ export class Playground {
   /** True when the race on screen should be the preset's recording: the experiment is
    *  exactly the recorded one and training it here would take too long. */
   recordingWanted = $derived.by(() => {
+    if (this.liveChosen) return false;
+    const sv = this.saved?.rec;
+    if (sv) return trainingIdentity(this.snapshotState()) === sv.key;
     const r = this.recordedPreset;
-    if (!r || this.liveChosen) return false;
+    if (!r) return false;
     if (!this.alwaysRecorded && this.estimateTotal <= LIVE_LIMIT_SECONDS) return false;
     return trainingIdentity(this.snapshotState()) === r.key;
   });
@@ -438,7 +533,7 @@ export class Playground {
     run.wave = wave;
     run.status = 'ready';
     run.trainer.start({
-      config: specConfig(run.spec),
+      config: this.configOf(run.spec),
       data,
       seed: run.spec.seed,
       epochs: this.epochs,
@@ -487,6 +582,8 @@ export class Playground {
       this.runs = [];
       return;
     }
+    const sv = this.saved?.rec;
+    if (this.recordingWanted && sv) return this.showRecording(sv, this.data, 'saved');
     if (this.recordingWanted && this.recordedPreset) {
       const { id, key } = this.recordedPreset;
       if (this.recording?.key === key) return this.showRecording(this.recording, this.data);
@@ -524,14 +621,44 @@ export class Playground {
     }
   }
 
-  private showRecording(rec: Recording, data: Dataset) {
+  private showRecording(rec: Recording, data: Dataset, kind: 'preset' | 'saved' = 'preset') {
     this.mode = 'recorded';
+    this.recordedKind = kind;
     this.runs = this.models.map((m, i) => {
       const run = new ModelRun($state.snapshot(m) as ModelSpec, () => {});
       const rm = rec.models[i];
-      if (rm) run.loadRecorded(rm, data, rec.backend);
+      if (rm) run.loadRecorded(rm, data, rm.backend ?? rec.backend);
+      // Saved results open where they were saved; Play replays them from the start.
+      if (rm && kind === 'saved') {
+        run.latest = run.final;
+        run.status = run.recordedDiverged ? 'diverged' : 'done';
+      }
       return run;
     });
+  }
+
+  /** The race on screen as a recording (for the library). Null before anything trained. */
+  recordingOfRace(): Recording | null {
+    if (!this.runs.length || this.maxEpoch === 0) return null;
+    const state = this.snapshotState();
+    const first = this.runs.find((r) => r.backend)?.backend ?? 'cpu-f64';
+    return {
+      key: trainingIdentity(state),
+      state,
+      backend: first,
+      adapter: this.runs.find((r) => r.adapter)?.adapter ?? '',
+      created: isoNow(),
+      gridSize: GRID_SIZE,
+      models: this.runs.map((r) => r.toRecorded()),
+    };
+  }
+
+  /** Opens a library entry: its settings, with its saved results shown first. */
+  openSaved(ref: SavedRef, state: ExperimentState) {
+    this.loadState(state);
+    this.recordedPreset = null;
+    this.liveChosen = false;
+    this.saved = ref;
   }
 
   /** Plays the recording: every model advances `speed` epochs per animation frame. */
@@ -587,6 +714,13 @@ export class Playground {
     if (this.restartPending) {
       this.playAfterRestart = true;
       return;
+    }
+    if (this.mode === 'recorded' && this.runs.length && this.runs.every((r) => r.finished)) {
+      // Replay a recording from the start without reloading it.
+      for (const r of this.runs) {
+        r.latest = 0;
+        r.status = 'ready';
+      }
     }
     if (
       this.status === 'done' ||
@@ -743,6 +877,7 @@ export class Playground {
   }
 
   applyPreset(p: Preset) {
+    this.saved = null;
     const backend = this.backend; // a preset does not change where models train
     const state = presetState(p);
     this.loadState(state);
@@ -751,19 +886,46 @@ export class Playground {
     this.recordedPreset = p.recorded ? { id: p.id, key: trainingIdentity(state) } : null;
   }
 
+  // ------------------------------------------------------------ targets
+
+  /** Opens a target tab. Entering Draw keeps the current y range for the empty canvas. */
+  setTargetTab(tab: TargetTab) {
+    if (tab === this.targetTab) return;
+    if (tab === 'draw') {
+      const d = this.data;
+      this.drawY = d ? autoYDomain(d.clean, d.trainY, d.valY) : [-2, 2];
+    } else this.drawY = null;
+    this.targetTab = tab;
+  }
+
+  /** Uses imported points as the target: plot range around them, training on the first 70%. */
+  importPoints(src: PointsSource, name: string) {
+    const layout = pointsLayout(src.xs);
+    this.imported = src;
+    this.importedName = name;
+    this.domain = layout.domain;
+    this.bands = layout.bands;
+    this.targetTab = 'data';
+  }
+
   // ------------------------------------------------------------ sharing
 
   snapshotState(): ExperimentState {
     return {
       v: STATE_VERSION,
       expr: this.expr,
+      ...(this.source ? { source: $state.snapshot(this.source) as DataSource } : {}),
       domain: [...this.domain],
       n: this.n,
       noise: $state.snapshot(this.noise) as Noise,
       seed: this.seed,
       valFraction: this.valFraction,
       bands: $state.snapshot(this.bands) as [number, number][],
-      models: this.models.map((m) => ({ model: specConfig(m), seed: m.seed, visible: m.visible })),
+      models: this.models.map((m) => ({
+        model: $state.snapshot(this.configOf(m)) as ModelConfig,
+        seed: m.seed,
+        visible: m.visible,
+      })),
       epochs: this.epochs,
       layout: this.layout,
       ...(this.backend !== 'auto' ? { backend: this.backend } : {}),
@@ -771,7 +933,15 @@ export class Playground {
   }
 
   loadState(s: ExperimentState) {
+    this.saved = null;
     this.expr = s.expr;
+    this.drawY = null;
+    if (s.source?.kind === 'drawn') this.drawing = s.source;
+    if (s.source?.kind === 'points') {
+      this.imported = s.source;
+      this.importedName = '';
+    }
+    this.targetTab = s.source?.kind === 'drawn' ? 'draw' : s.source ? 'data' : 'formula';
     this.domain = s.domain;
     this.n = s.n;
     this.seed = s.seed;

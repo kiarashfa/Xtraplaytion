@@ -67,6 +67,7 @@ describe.each(targets)('$name', (target) => {
     await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).fill('17');
     await page.getByRole('spinbutton', { name: 'Neurons in layer 1' }).press('Tab');
     await page.getByRole('button', { name: /Share/ }).click();
+    await page.getByRole('button', { name: /Copy link/ }).click();
     await expect.poll(() => page.url()).toContain('#s=');
     const link = page.url();
     const fresh = await context.newPage();
@@ -179,6 +180,7 @@ describe.each(targets)('$name', (target) => {
     await expect.poll(() => rows.nth(1).textContent()).toContain('building');
     await page.getByRole('button', { name: 'Live' }).click();
     await page.getByRole('button', { name: /Share/ }).click();
+    await page.getByRole('button', { name: /Copy link/ }).click();
     await expect.poll(() => page.url()).toContain('#s=');
     const fresh = await context.newPage();
     await fresh.goto(page.url());

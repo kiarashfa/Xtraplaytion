@@ -203,6 +203,20 @@
     border-color: var(--xp-accent);
     color: var(--xp-accent-ink);
   }
+  .xp-menuitem {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    text-align: start;
+    cursor: pointer;
+  }
+  .xp-menuitem:hover,
+  .xp-menuitem:focus-visible {
+    background: var(--xp-surface-2);
+  }
   .xp-label {
     font-size: 12px;
     font-weight: 550;

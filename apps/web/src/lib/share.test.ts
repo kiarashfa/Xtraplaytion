@@ -9,7 +9,7 @@ const model = (w: number) => ({
 const hidden = (c: ModelConfig | undefined) => (c as MLPConfig | undefined)?.hidden;
 
 const state: ExperimentState = {
-  v: 3,
+  v: 4,
   expr: 'sin(3x)',
   domain: [-5, 5],
   n: 120,
@@ -82,15 +82,41 @@ describe('share links', () => {
     const { models: _m, layout: _l, ...rest } = state;
     const v1 = { ...rest, v: 1, model: model(17) };
     const s = validateState(v1);
-    expect(s?.v).toBe(3);
+    expect(s?.v).toBe(4);
     expect(s?.models).toHaveLength(1);
     expect(hidden(s?.models[0].model)).toEqual([17, 17]);
     expect(s?.models[0].seed).toBe(7);
     expect(s?.layout).toBe('overlay');
   });
 
-  it('accept version 2 links unchanged', () => {
+  it('accept version 2 and 3 links unchanged', () => {
     expect(validateState({ ...state, v: 2 })?.models).toHaveLength(2);
+    expect(validateState({ ...state, v: 3 })?.models).toHaveLength(2);
+    // A source only exists from version 4 on.
+    const drawn = { kind: 'drawn', x0: -1, x1: 1, ys: [0, 1, 0] };
+    expect(validateState({ ...state, v: 3, source: drawn })?.source).toBeUndefined();
+  });
+
+  it('round-trip drawings and imported points exactly', async () => {
+    const drawn = { kind: 'drawn' as const, x0: -4.5, x1: 3.25, ys: [0.12, -1.5, 2e-3, 7] };
+    const back = await decodeState(await encodeState({ ...state, source: drawn }));
+    expect(back?.source).toEqual(drawn);
+    const xs = Array.from({ length: 50 }, (_, i) => i * 0.1 + 1 / 3);
+    const pts = { kind: 'points' as const, xs, ys: xs.map((x) => Math.sqrt(x)) };
+    const back2 = await decodeState(await encodeState({ ...state, source: pts }));
+    expect(back2?.source).toEqual(pts);
+  });
+
+  it('reject malformed sources', () => {
+    const bad = [
+      { kind: 'drawn', x0: 1, x1: 1, ys: [0, 1] },
+      { kind: 'drawn', x0: 0, x1: 1, ys: [0] },
+      { kind: 'drawn', x0: 0, x1: 1, ys: [0, null] },
+      { kind: 'points', xs: [1, 2], ys: [1] },
+      { kind: 'points', xs: [1, 2], ys: [1, 1e300] },
+      { kind: 'csv' },
+    ];
+    for (const source of bad) expect(validateState({ ...state, source })).toBeNull();
   });
 
   it('reject malformed or oversized races', async () => {
@@ -102,7 +128,7 @@ describe('share links', () => {
     }));
     expect(validateState({ ...state, models: seven })).toBeNull();
     expect(validateState({ ...state, models: [{ model: model(4) }] })).toBeNull();
-    expect(validateState({ ...state, v: 4 })).toBeNull();
+    expect(validateState({ ...state, v: 5 })).toBeNull();
     expect(await decodeState('not-a-real-link')).toBeNull();
   });
 });

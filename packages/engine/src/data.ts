@@ -37,6 +37,9 @@ export interface Dataset {
   /** Target on the grid without noise (NaN where undefined or unknown). */
   clean: Float64Array;
   region: Uint8Array;
+  /** Held-out points outside the training ranges, used for scoring when there is no
+   *  true function (imported data). Region per point as for the grid. */
+  test?: { x: Float64Array; y: Float64Array; region: Uint8Array };
 }
 
 export function regionOf(x: number, bands: [number, number][]): Region {
@@ -93,22 +96,16 @@ export function buildDataset(target: (x: number) => number, spec: DataSpec): Dat
       }
     }
   });
-  // Seeded validation split: shuffle indices, the first k go to validation.
-  const split = new Rng(spec.seed, 3);
-  const idx = xs.map((_, i) => i);
-  for (let i = idx.length - 1; i > 0; i--) {
-    const j = split.int(i + 1);
-    [idx[i], idx[j]] = [idx[j], idx[i]];
-  }
-  const k = Math.round(Math.min(0.9, Math.max(0, spec.valFraction)) * xs.length);
-  const isVal = new Uint8Array(xs.length);
-  for (let i = 0; i < k; i++) isVal[idx[i]] = 1;
+  // Points where the target is undefined (or unknown, outside a drawing) are dropped.
+  // Noise was drawn for every point, so valid targets keep exactly the same data.
+  const keep = ys.map((y) => Number.isFinite(y));
+  const fx = xs.filter((_, i) => keep[i]);
+  const fy = ys.filter((_, i) => keep[i]);
+  const { isVal } = splitValidation(fx.length, spec.valFraction, spec.seed);
   const pick = (want: number, arr: number[]) =>
     Float64Array.from(arr.filter((_, i) => isVal[i] === want));
 
-  const g = Math.max(2, spec.gridSize);
-  const [d0, d1] = spec.domain;
-  const gridX = Float64Array.from({ length: g }, (_, i) => d0 + ((d1 - d0) * i) / (g - 1));
+  const gridX = gridOf(spec.domain, spec.gridSize);
   const clean = gridX.map((x) => {
     const v = target(x);
     return Number.isFinite(v) ? v : NaN;
@@ -116,12 +113,93 @@ export function buildDataset(target: (x: number) => number, spec: DataSpec): Dat
   const region = Uint8Array.from(gridX, (x) => regionOf(x, spec.bands.length ? bands : []));
   return {
     dim: 1,
-    trainX: pick(0, xs),
-    trainY: pick(0, ys),
-    valX: pick(1, xs),
-    valY: pick(1, ys),
+    trainX: pick(0, fx),
+    trainY: pick(0, fy),
+    valX: pick(1, fx),
+    valY: pick(1, fy),
     gridX,
     clean,
     region,
+  };
+}
+
+/** Seeded validation split: shuffle indices, the first k go to validation. */
+function splitValidation(n: number, valFraction: number, seed: number) {
+  const split = new Rng(seed, 3);
+  const idx = Array.from({ length: n }, (_, i) => i);
+  for (let i = idx.length - 1; i > 0; i--) {
+    const j = split.int(i + 1);
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  const k = Math.round(Math.min(0.9, Math.max(0, valFraction)) * n);
+  const isVal = new Uint8Array(n);
+  for (let i = 0; i < k; i++) isVal[idx[i]] = 1;
+  return { isVal };
+}
+
+function gridOf([d0, d1]: [number, number], size: number): Float64Array {
+  const g = Math.max(2, size);
+  return Float64Array.from({ length: g }, (_, i) => d0 + ((d1 - d0) * i) / (g - 1));
+}
+
+export interface PointsSpec {
+  domain: [number, number];
+  /** Training ranges; empty means everything is training data. */
+  bands: [number, number][];
+  /** Share of the points inside the ranges held out for validation, 0..0.9. */
+  valFraction: number;
+  seed: number;
+  gridSize: number;
+}
+
+/** A dataset from given points (no true function). Points inside the training ranges are
+ *  split into training and validation; points outside them (within the domain) are kept
+ *  as test points for the gap and beyond scores. Order of the input does not matter. */
+export function datasetFromPoints(
+  xs: ArrayLike<number>,
+  ys: ArrayLike<number>,
+  spec: PointsSpec,
+): Dataset {
+  const bands = spec.bands
+    .map(([a, b]) => [Math.min(a, b), Math.max(a, b)] as [number, number])
+    .sort((p, q) => p[0] - q[0]);
+  const order = Array.from({ length: Math.min(xs.length, ys.length) }, (_, i) => i).filter(
+    (i) => Number.isFinite(xs[i]) && Number.isFinite(ys[i]),
+  );
+  // Sorted by x (stable), so the result does not depend on the row order of a file.
+  order.sort((a, b) => xs[a] - xs[b] || a - b);
+  const [d0, d1] = spec.domain;
+  const inX: number[] = [];
+  const inY: number[] = [];
+  const tX: number[] = [];
+  const tY: number[] = [];
+  const tR: number[] = [];
+  for (const i of order) {
+    const x = xs[i];
+    if (x < d0 || x > d1) continue;
+    const r = regionOf(x, bands);
+    if (r === Region.Train) {
+      inX.push(x);
+      inY.push(ys[i]);
+    } else {
+      tX.push(x);
+      tY.push(ys[i]);
+      tR.push(r);
+    }
+  }
+  const { isVal } = splitValidation(inX.length, spec.valFraction, spec.seed);
+  const pick = (want: number, arr: number[]) =>
+    Float64Array.from(arr.filter((_, i) => isVal[i] === want));
+  const gridX = gridOf(spec.domain, spec.gridSize);
+  return {
+    dim: 1,
+    trainX: pick(0, inX),
+    trainY: pick(0, inY),
+    valX: pick(1, inX),
+    valY: pick(1, inY),
+    gridX,
+    clean: new Float64Array(gridX.length).fill(NaN),
+    region: Uint8Array.from(gridX, (x) => regionOf(x, bands)),
+    test: { x: Float64Array.from(tX), y: Float64Array.from(tY), region: Uint8Array.from(tR) },
   };
 }

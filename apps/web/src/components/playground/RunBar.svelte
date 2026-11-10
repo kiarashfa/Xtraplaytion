@@ -3,12 +3,13 @@
   import { formatDuration } from '../../lib/capability.ts';
   import type { Playground } from '../../lib/playground.svelte.ts';
   import Icon from '../Icon.svelte';
+  import SaveShare from './SaveShare.svelte';
 
   const {
     pg,
-    onshare,
+    say,
     compact = false,
-  }: { pg: Playground; onshare: () => void; compact?: boolean } = $props();
+  }: { pg: Playground; say: (text: string) => void; compact?: boolean } = $props();
   const t = useTranslations();
   const speeds = [1, 2, 4, 8, 16, 32, 64, 128];
   const speedIndex = $derived(Math.max(0, speeds.indexOf(pg.speed)));
@@ -34,8 +35,8 @@
   });
   const nf = new Intl.NumberFormat('en');
   // What trains where: the runs' real backends once known, the expected one before.
-  const where = $derived.by((): 'cpu' | 'gpu' | 'mixed' | 'recorded' => {
-    if (pg.mode === 'recorded') return 'recorded';
+  const where = $derived.by((): 'cpu' | 'gpu' | 'mixed' | 'recorded' | 'saved' => {
+    if (pg.mode === 'recorded') return pg.recordedKind === 'saved' ? 'saved' : 'recorded';
     const b = pg.backends;
     if (b.length > 1) return 'mixed';
     if (b.length === 1) return b[0] === 'webgpu' ? 'gpu' : 'cpu';
@@ -117,7 +118,7 @@
       class="inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold whitespace-nowrap {where ===
       'cpu'
         ? 'bg-good/15 text-good'
-        : where === 'recorded'
+        : where === 'recorded' || where === 'saved'
           ? 'bg-line text-muted'
           : 'bg-accent-soft text-accent'}"
       title={t(`pg.run.backend.${where}.hint`)}
@@ -125,10 +126,6 @@
     >
       <span class="size-1.5 rounded-full bg-current"></span>{t(`pg.run.backend.${where}`)}
     </span>
-    <button type="button" class="xp-btn min-h-11" onclick={onshare}
-      ><Icon name="share" />{#if !compact}{t('pg.share')}{/if}<span class="sr-only"
-        >{compact ? t('pg.share') : ''}</span
-      ></button
-    >
+    <SaveShare {pg} {compact} {say} />
   </div>
 </div>

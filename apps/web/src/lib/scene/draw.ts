@@ -99,6 +99,8 @@ export const sy = (f: Frame2D, y: number) =>
   f.y0 + ((f.yDomain[1] - y) / (f.yDomain[1] - f.yDomain[0])) * f.h;
 export const invX = (f: Frame2D, px: number) =>
   f.xDomain[0] + ((px - f.x0) / f.w) * (f.xDomain[1] - f.xDomain[0]);
+export const invY = (f: Frame2D, py: number) =>
+  f.yDomain[1] - ((py - f.y0) / f.h) * (f.yDomain[1] - f.yDomain[0]);
 
 export interface FitScene {
   width: number;
@@ -112,6 +114,13 @@ export interface FitScene {
   valY: ArrayLike<number>;
   gridX: ArrayLike<number>;
   truth: ArrayLike<number> | null;
+  /** Held-out points outside the training ranges (imported data), drawn faintly. */
+  testX?: ArrayLike<number>;
+  testY?: ArrayLike<number>;
+  /** The target is a drawing being edited: drawn as a solid line, not dotted. */
+  drawn?: boolean;
+  /** A stroke in progress (data coordinates). */
+  stroke?: { x: number; y: number }[];
   /** `band`: posterior std on the grid, drawn as a shaded ±2 std range. */
   models: { ys: ArrayLike<number>; color: number; label?: string; band?: ArrayLike<number> }[];
   regionLabels: { train: string; gap: string; beyond: string } | null;
@@ -279,12 +288,31 @@ export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
 
   if (s.truth) {
     ctx.strokeStyle = th.truth;
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = s.drawn ? 2.4 : 1.6;
     ctx.lineCap = 'round';
-    ctx.setLineDash([1.5, 4]);
+    ctx.lineJoin = 'round';
+    ctx.setLineDash(s.drawn ? [] : [1.5, 4]);
     polyline(ctx, f, s.gridX, s.truth);
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+
+  if (s.testX && s.testY) {
+    ctx.strokeStyle = th.muted;
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 1.1;
+    const q = s.compact ? 2 : 2.5;
+    for (let i = 0; i < s.testX.length; i++) {
+      const px = sx(f, s.testX[i]);
+      const py = sy(f, s.testY[i]);
+      ctx.beginPath();
+      ctx.moveTo(px - q, py - q);
+      ctx.lineTo(px + q, py + q);
+      ctx.moveTo(px + q, py - q);
+      ctx.lineTo(px - q, py + q);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
 
   const r = s.compact ? 2 : 2.6;
@@ -334,6 +362,19 @@ export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
     polyline(ctx, f, s.gridX, m.ys);
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+
+  if (s.stroke && s.stroke.length > 1) {
+    ctx.strokeStyle = th.target;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    s.stroke.forEach((p, i) => {
+      if (i) ctx.lineTo(sx(f, p.x), sy(f, p.y));
+      else ctx.moveTo(sx(f, p.x), sy(f, p.y));
+    });
+    ctx.stroke();
   }
 
   if (s.crosshairX != null) {

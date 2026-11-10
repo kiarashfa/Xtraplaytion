@@ -6,7 +6,7 @@ import { StagedRun, type StageInfo } from './classical/staged.ts';
 import type { MLPConfig, ModelConfig } from './config.ts';
 import type { Dataset } from './data.ts';
 import { lossAndGrad, lossOnly } from './losses.ts';
-import { regionMetrics, type RegionMetrics } from './metrics.ts';
+import { scoreGrid, type RegionMetrics } from './metrics.ts';
 import { MLP } from './mlp.ts';
 import { lrAt, Optimizer } from './optim.ts';
 
@@ -137,14 +137,14 @@ export class MLPRun implements Model {
   }
 
   frame(): Frame {
-    const { gridX, clean, region } = this.data;
+    const { gridX } = this.data;
     this.net.predict(gridX, gridX.length, this.gridOut);
     return {
       epoch: this.ep,
       trainLoss: this.trainLoss.length ? this.trainLoss[this.trainLoss.length - 1] : NaN,
       valLoss: this.valLoss.length ? this.valLoss[this.valLoss.length - 1] : NaN,
       grid: Float32Array.from(this.gridOut),
-      metrics: regionMetrics(this.gridOut, clean, region),
+      metrics: scoreGrid(this.gridOut, this.data),
     };
   }
 

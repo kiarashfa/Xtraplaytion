@@ -8,11 +8,16 @@ import type {
   ModelConfig,
   Noise,
   OptimizerKind,
+  Scaling,
 } from '@xtraplaytion/engine';
 import { validClassical } from './models.ts';
+import { validSource, type DataSource } from './source.ts';
 
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 const MAX_DECODED = 64 * 1024;
+/** Longest share code we hand out (characters after #s=). Bigger experiments (large
+ *  imported data) go to a file instead. */
+export const MAX_LINK_CODE = 8000;
 
 export interface SharedModel {
   model: ModelConfig;
@@ -21,11 +26,14 @@ export interface SharedModel {
   visible: boolean;
 }
 
-/** Version 3: competitors can be classical models. Version 2 (networks only) has the same
- *  shape; version 1 links (one network) are migrated on load. */
+/** Version 4: the target can be a drawing or imported points (`source`; the formula is
+ *  kept so switching back restores it). Version 3 (no source) and version 2 (networks only)
+ *  have the same shape; version 1 links (one network) are migrated on load. */
 export interface ExperimentState {
-  v: 3;
+  v: 4;
   expr: string;
+  /** Drawn curve or imported points; absent means the formula is the target. */
+  source?: DataSource;
   domain: [number, number];
   n: number;
   noise: Noise;
@@ -129,7 +137,7 @@ export function validateState(o: unknown): ExperimentState | null {
   if (!o || typeof o !== 'object') return null;
   const s = o as Record<string, unknown>;
   if (
-    (s['v'] !== 1 && s['v'] !== 2 && s['v'] !== STATE_VERSION) ||
+    ![1, 2, 3, STATE_VERSION].includes(s['v'] as number) ||
     typeof s['expr'] !== 'string' ||
     s['expr'].length > LIMITS.exprLength
   )
@@ -157,6 +165,11 @@ export function validateState(o: unknown): ExperimentState | null {
   }
   const noise = validNoise(s['noise']);
   if (!noise) return null;
+  let source: DataSource | null = null;
+  if (s['v'] === STATE_VERSION && s['source'] !== undefined) {
+    source = validSource(s['source']);
+    if (!source) return null;
+  }
   const seed = Math.round(clamp(s['seed'], 0, 2 ** 31 - 1));
   let models: SharedModel[];
   if (s['v'] === 1) {
@@ -187,6 +200,7 @@ export function validateState(o: unknown): ExperimentState | null {
   return {
     v: STATE_VERSION,
     expr: s['expr'],
+    ...(source ? { source } : {}),
     domain,
     n: Math.round(clamp(s['n'], 2, LIMITS.n)),
     noise,
@@ -276,5 +290,23 @@ function validModel(o: unknown): MLPConfig | null {
     l2: isNum(m['l2']) ? clamp(m['l2'], 0, 10) : 0,
     batch: { kind: 'full' },
     dropout: 0,
+    ...(validScale(m['scale']) ?? {}),
+  };
+}
+
+/** Network scaling from a link or file (imported data). */
+function validScale(o: unknown): { scale: Scaling } | null {
+  if (!o || typeof o !== 'object') return null;
+  const s = o as Record<string, unknown>;
+  const { xShift, xScale, yShift, yScale } = s;
+  if (![xShift, xScale, yShift, yScale].every((v) => isNum(v) && Math.abs(v) < 1e15)) return null;
+  if (!((xScale as number) > 0) || !((yScale as number) > 0)) return null;
+  return {
+    scale: {
+      xShift: xShift as number,
+      xScale: xScale as number,
+      yShift: yShift as number,
+      yScale: yScale as number,
+    },
   };
 }

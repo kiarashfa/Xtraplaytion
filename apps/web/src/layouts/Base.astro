@@ -22,6 +22,7 @@ const here = Astro.url.pathname.replace(/\/+$/, '/');
 const nav = [
   { href: url('playground/'), label: t('nav.playground') },
   { href: url('lessons/'), label: t('nav.lessons') },
+  { href: url('library/'), label: t('nav.library') },
 ];
 const pageTitle = title ? `${title} · ${SITE.name}` : SITE.name;
 const canonical = new URL(Astro.url.pathname, Astro.site);
@@ -50,7 +51,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     </a>
     <header
       class:list={[
-        'flex w-full items-center gap-3 px-4 sm:gap-5 sm:px-6',
+        'flex w-full items-center gap-2 px-4 sm:gap-5 sm:px-6',
         wide ? 'h-14 border-b border-line bg-surface' : 'mx-auto max-w-5xl py-4',
       ]}
     >
@@ -58,18 +59,17 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         <img src={url('favicon.svg')} alt="" width="28" height="28" />
         <span class="max-sm:sr-only">{SITE.name}</span>
       </a>
-      <nav class="flex gap-0.5" aria-label={t('nav.main')}>
+      <nav class="flex gap-0.5 me-auto" aria-label={t('nav.main')}>
         {nav.map((n) => (
           <a
             href={n.href}
             aria-current={here.startsWith(n.href) ? 'page' : undefined}
-            class="inline-flex min-h-11 items-center rounded-lg px-2.5 text-[14px] font-medium text-muted hover:text-ink aria-[current=page]:text-ink aria-[current=page]:underline aria-[current=page]:decoration-accent aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8"
+            class="inline-flex min-h-11 items-center rounded-lg px-1 text-[13px] font-medium sm:px-2.5 sm:text-[14px] text-muted hover:text-ink aria-[current=page]:text-ink aria-[current=page]:underline aria-[current=page]:decoration-accent aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8"
           >
             {n.label}
           </a>
         ))}
       </nav>
-      <span class="flex-1"></span>
       <ThemeToggle
         client:load
         storageKey={THEME_KEY}

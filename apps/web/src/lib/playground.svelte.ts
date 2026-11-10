@@ -30,8 +30,16 @@ import {
   type GpuSpeed,
 } from './capability.ts';
 import { datasetFrom, GRID_SIZE, presetState, trainingIdentity } from './experiment.ts';
-import { FrameHistory, type StoredFrame } from './history.ts';
-import { classicalSeconds, defaultClassical, LETTER, type Family } from './models.ts';
+import { canKink, kinkView } from './insight.ts';
+import { FrameHistory, snapshotHistory, type StoredFrame, type WeightSnapshot } from './history.ts';
+import {
+  bootstrapData,
+  classicalSeconds,
+  copySeed,
+  defaultClassical,
+  LETTER,
+  type Family,
+} from './models.ts';
 import type { Preset } from './presets.ts';
 import { isoNow, loadRecording, type Recording, type RecordedModel } from './recording.ts';
 import { recordingUrl } from './recordings.ts';
@@ -44,13 +52,14 @@ import {
   type DrawnSource,
   type PointsSource,
 } from './source.ts';
-import { Trainer } from './trainer.ts';
+import { Series, Trainer, type StartOptions, type TrainerEvents } from './trainer.ts';
 
 export type Status = 'ready' | 'running' | 'paused' | 'done' | 'diverged' | 'error';
 export type RunStatus = 'queued' | 'ready' | 'running' | 'paused' | 'done' | 'diverged' | 'error';
 export type NoiseKind = 'none' | 'gaussian' | 'uniform' | 'outliers';
 export type Layout = 'overlay' | 'stacked';
 export type TargetTab = 'formula' | 'presets' | 'draw' | 'data';
+export type InsightTab = 'neurons' | 'kinks' | 'waves' | 'weights' | 'map';
 /** A library entry the playground was opened from. */
 export interface SavedRef {
   id: string;
@@ -94,6 +103,8 @@ interface SpecBase {
   /** Seed for the initial weights (networks) or the bootstrap samples (forests). */
   seed: number;
   visible: boolean;
+  /** Average of this many copies (absent or 1: a single model). */
+  copies?: number;
 }
 
 export interface NetSpec extends SpecBase {
@@ -113,7 +124,10 @@ export type ModelSpec = NetSpec | ClassicSpec;
 
 export const familyOf = (s: ModelSpec): Family => (s.kind === 'mlp' ? 'mlp' : s.config.kind);
 /** Display name: family letter + color slot (N1, P3...). */
-export const modelName = (s: ModelSpec) => `${LETTER[familyOf(s)]}${s.color}`;
+export const modelName = (s: ModelSpec) => {
+  const k = copiesOf(s);
+  return `${LETTER[familyOf(s)]}${s.color}${k > 1 ? ` ×${k}` : ''}`;
+};
 
 export function specConfig(s: ModelSpec): ModelConfig {
   return s.kind === 'classical' ? s.config : netConfig(s);
@@ -141,18 +155,29 @@ const PLAYBACK_FPS = 60;
 
 const FINISHED: ReadonlySet<RunStatus> = new Set(['done', 'diverged', 'error']);
 
-/** One model's live run. */
+/** How many copies a model averages (the Gaussian process has its own band). */
+export const copiesOf = (s: ModelSpec) =>
+  s.kind === 'classical' && s.config.kind === 'gp' ? 1 : Math.max(1, Math.round(s.copies ?? 1));
+
+/** One model's live run (one worker, or one per copy when the model averages copies). */
 export class ModelRun {
   readonly spec: ModelSpec;
-  readonly trainer: Trainer;
+  readonly copies: number;
+  readonly trainers: Trainer[];
   readonly history = new FrameHistory(600);
+  /** Weights per frame (networks without copies, up to SNAPSHOT_PARAMS parameters). */
+  snapshots: FrameHistory<WeightSnapshot> | null = null;
+  /** Weights sent on request (bigger networks). */
+  requested = $state.raw<WeightSnapshot | null>(null);
+  /** Loss curves shown (the average over copies for an averaged model). */
+  readonly trainLoss: Series;
+  readonly valLoss: Series;
   status = $state<RunStatus>('queued');
   latest = $state(0);
   epochsPerSec = $state(0);
   /** Bumped on every new frame (history and losses are not reactive themselves). */
   version = $state(0);
   errorMessage = '';
-  pendingSeq = 0;
   /** Start wave: models started together keep pace with each other. */
   wave = 0;
   /** Backend in use (null until the worker is ready). */
@@ -162,49 +187,193 @@ export class ModelRun {
   /** Epoch from which training continued after the GPU was lost. */
   recoveredAt = $state<number | null>(null);
   adapter = '';
+  /** Dataset the run trains on (scoring the average of copies). */
+  data: Dataset | null = null;
+  private readonly pending: number[];
+  private readonly memberLatest: number[];
+  private readonly memberHist: FrameHistory[];
+  private readonly memberDone: (string | null)[];
+  private readonly onDone: (run: ModelRun) => void;
+  private combinedAt = -1;
 
   constructor(spec: ModelSpec, onDone: (run: ModelRun) => void) {
     this.spec = spec;
-    this.trainer = new Trainer(
-      {
-        ready: (m) => {
-          this.backend = m.backend;
-          this.fallback = m.fallback ?? null;
-          this.adapter = m.adapter ?? '';
-        },
-        recovered: (epoch, backend, reason) => {
-          this.backend = backend;
-          this.fallback = backend === 'webgpu' ? null : reason;
-          this.recoveredAt = epoch;
-        },
-        frame: (f) => {
-          this.backend = f.backend;
-          this.history.add({
-            epoch: f.epoch,
-            grid: f.grid,
-            metrics: f.metrics,
-            trainLoss: f.trainLoss,
-            valLoss: f.valLoss,
-            ...(f.band ? { band: f.band } : {}),
-            ...(f.stage ? { stage: f.stage } : {}),
-          });
-          this.latest = f.epoch;
-          if (f.epochsPerSec) this.epochsPerSec = f.epochsPerSec;
-          this.pendingSeq = f.seq;
-          this.version++;
-        },
-        done: (reason) => {
-          this.status = reason === 'diverged' ? 'diverged' : 'done';
-          onDone(this);
-        },
-        error: (message) => {
-          this.status = 'error';
-          this.errorMessage = message;
-          onDone(this);
-        },
-      },
-      { autoAck: false },
+    this.onDone = onDone;
+    this.copies = copiesOf(spec);
+    this.trainers = Array.from(
+      { length: this.copies },
+      (_, i) => new Trainer(this.events(i), { autoAck: false }),
     );
+    this.pending = new Array<number>(this.copies).fill(0);
+    this.memberLatest = new Array<number>(this.copies).fill(-1);
+    this.memberDone = new Array<string | null>(this.copies).fill(null);
+    this.memberHist = this.copies > 1 ? this.trainers.map(() => new FrameHistory(600)) : [];
+    this.trainLoss = this.copies > 1 ? new Series() : this.trainers[0].trainLoss;
+    this.valLoss = this.copies > 1 ? new Series() : this.trainers[0].valLoss;
+  }
+
+  private events(i: number): TrainerEvents {
+    return {
+      ready: (m) => {
+        if (i === 0 || m.backend === 'webgpu') this.backend = m.backend;
+        if (m.fallback) this.fallback = m.fallback;
+        if (m.adapter) this.adapter = m.adapter;
+      },
+      recovered: (epoch, backend, reason) => {
+        this.backend = backend;
+        this.fallback = backend === 'webgpu' ? null : reason;
+        this.recoveredAt = epoch;
+      },
+      frame: (f) => {
+        this.pending[i] = f.seq;
+        this.memberLatest[i] = f.epoch;
+        if (i === 0) {
+          this.backend = f.backend;
+          if (f.epochsPerSec) this.epochsPerSec = f.epochsPerSec;
+        }
+        const stored: StoredFrame = {
+          epoch: f.epoch,
+          grid: f.grid,
+          metrics: f.metrics,
+          trainLoss: f.trainLoss,
+          valLoss: f.valLoss,
+          ...(f.band ? { band: f.band } : {}),
+          ...(f.stage ? { stage: f.stage } : {}),
+        };
+        if (this.copies === 1) {
+          this.history.add(stored);
+          if (f.params) {
+            this.snapshots ??= snapshotHistory(f.params.length);
+            this.snapshots.add({ epoch: f.epoch, params: f.params });
+          }
+          this.latest = f.epoch;
+          this.version++;
+        } else {
+          this.memberHist[i].add(stored);
+          this.combine();
+        }
+      },
+      snapshot: (epoch, params) => {
+        this.requested = { epoch, params };
+      },
+      done: (reason) => {
+        this.memberDone[i] = reason;
+        if (this.memberDone.some((d) => d === null)) return;
+        if (this.copies > 1) this.combine();
+        this.status = this.memberDone.every((d) => d === 'diverged') ? 'diverged' : 'done';
+        this.onDone(this);
+      },
+      error: (message) => {
+        if (this.status === 'error') return;
+        this.status = 'error';
+        this.errorMessage = message;
+        this.onDone(this);
+      },
+    };
+  }
+
+  /** Averaged model: once every copy reached an epoch, store the average and spread there. */
+  private combine() {
+    const e = Math.min(...this.memberLatest);
+    if (e < 0 || e <= this.combinedAt || !this.data) return;
+    this.combinedAt = e;
+    const frames = this.memberHist.map((h) => h.at(e));
+    const n = frames[0]?.grid.length ?? 0;
+    const mean = new Float32Array(n);
+    const sd = new Float32Array(n);
+    for (let j = 0; j < n; j++) {
+      let s = 0;
+      let s2 = 0;
+      let k = 0;
+      for (const fr of frames) {
+        const v = fr ? fr.grid[j] : NaN;
+        if (!Number.isFinite(v)) continue;
+        s += v;
+        s2 += v * v;
+        k++;
+      }
+      mean[j] = k ? s / k : NaN;
+      sd[j] = k ? Math.sqrt(Math.max(0, s2 / k - (s / k) ** 2)) : NaN;
+    }
+    // Loss curves: the average of the copies' losses, as far as every copy got.
+    const len = Math.min(...this.trainers.map((t) => t.trainLoss.length));
+    const from = Math.min(this.trainLoss.length, len);
+    this.trainLoss.truncate(from);
+    this.valLoss.truncate(from);
+    const avg = (pick: (t: Trainer) => Series) =>
+      Float64Array.from({ length: len - from }, (_, q) => {
+        let s = 0;
+        let k = 0;
+        for (const t of this.trainers) {
+          const v = pick(t).data[from + q];
+          if (Number.isFinite(v)) {
+            s += v;
+            k++;
+          }
+        }
+        return k ? s / k : NaN;
+      });
+    this.trainLoss.push(avg((t) => t.trainLoss));
+    this.valLoss.push(avg((t) => t.valLoss));
+    const stage = frames[0]?.stage;
+    this.history.add({
+      epoch: e,
+      grid: mean,
+      band: sd,
+      metrics: scoreGrid(mean, this.data),
+      trainLoss: this.trainLoss.length ? this.trainLoss.data[this.trainLoss.length - 1] : NaN,
+      valLoss: this.valLoss.length ? this.valLoss.data[this.valLoss.length - 1] : NaN,
+      ...(stage ? { stage } : {}),
+    });
+    this.latest = e;
+    this.version++;
+  }
+
+  /** Starts training (every copy in its own worker). */
+  start(opts: Omit<StartOptions, 'seed'>) {
+    this.data = opts.data;
+    const classical = opts.config.kind !== 'mlp';
+    this.trainers.forEach((t, i) =>
+      t.start({
+        ...opts,
+        data:
+          this.copies > 1 && classical ? bootstrapData(opts.data, this.spec.seed + i) : opts.data,
+        seed: classical ? this.spec.seed : copySeed(this.spec.seed, i),
+      }),
+    );
+  }
+  play() {
+    for (const t of this.trainers) t.play();
+  }
+  pause() {
+    for (const t of this.trainers) t.pause();
+  }
+  step(n = 1) {
+    for (const t of this.trainers) t.step(n);
+  }
+  setSpeed(epochsPerFrame: number) {
+    for (const t of this.trainers) t.setSpeed(epochsPerFrame);
+  }
+  dispose() {
+    for (const t of this.trainers) t.dispose();
+  }
+  /** Asks the worker for the current weights (networks without copies). */
+  requestSnapshot() {
+    if (this.copies === 1 && this.trainers[0].started) this.trainers[0].snapshot();
+  }
+  get hasPending(): boolean {
+    return this.pending.some((s) => s > 0);
+  }
+  /** Lets copies that are not ahead of `limit` send their next frame. */
+  ack(limit: number) {
+    this.pending.forEach((seq, i) => {
+      if (!seq) return;
+      const mine = this.copies > 1 ? this.memberLatest[i] : this.latest;
+      if (this.finished || mine <= limit) {
+        this.trainers[i].ack(seq);
+        this.pending[i] = 0;
+      }
+    });
   }
 
   get finished(): boolean {
@@ -216,6 +385,12 @@ export class ModelRun {
     return this.history.at(epoch);
   }
 
+  /** Weights shown at `epoch`: the snapshot at or before it, else the latest requested. */
+  weightsAt(epoch: number): WeightSnapshot | null {
+    void this.version;
+    return this.snapshots?.at(epoch) ?? this.requested;
+  }
+
   /** Recorded runs: the last epoch of the recording, and whether it diverged there. */
   final = 0;
   recordedDiverged = false;
@@ -224,10 +399,10 @@ export class ModelRun {
   toRecorded(): RecordedModel {
     const frames = this.history.frames;
     const hasBand = frames.length > 0 && frames.every((f) => f.band);
-    const n = this.trainer.trainLoss.length;
+    const n = this.trainLoss.length;
     return {
-      trainLoss: Float32Array.from(this.trainer.trainLoss.view().subarray(0, n)),
-      valLoss: Float32Array.from(this.trainer.valLoss.view().subarray(0, n)),
+      trainLoss: Float32Array.from(this.trainLoss.view().subarray(0, n)),
+      valLoss: Float32Array.from(this.valLoss.view().subarray(0, n)),
       frameEpochs: Uint32Array.from(frames, (f) => f.epoch),
       grids: frames.map((f) => f.grid),
       diverged: this.status === 'diverged',
@@ -250,17 +425,18 @@ export class ModelRun {
         metrics: scoreGrid(grid, data),
         trainLoss: epoch > 0 ? m.trainLoss[epoch - 1] : NaN,
         valLoss: epoch > 0 ? m.valLoss[epoch - 1] : NaN,
-        ...(band ? { band } : {}),
+        ...(band && band.length ? { band } : {}),
         ...(stage ? { stage } : {}),
       });
     });
-    this.trainer.trainLoss.clear();
-    this.trainer.valLoss.clear();
-    this.trainer.trainLoss.push(Float64Array.from(m.trainLoss));
-    this.trainer.valLoss.push(Float64Array.from(m.valLoss));
+    this.trainLoss.clear();
+    this.valLoss.clear();
+    this.trainLoss.push(Float64Array.from(m.trainLoss));
+    this.valLoss.push(Float64Array.from(m.valLoss));
     this.final = m.frameEpochs[m.frameEpochs.length - 1] ?? 0;
     this.recordedDiverged = m.diverged;
     this.backend = backend;
+    this.data = data;
     this.status = 'ready';
     this.latest = 0;
     this.version++;
@@ -327,6 +503,10 @@ export class Playground {
   ]);
   selected = $state(0);
   layout = $state<Layout>('overlay');
+  // ---- insight views
+  /** Model shown in the Look inside card (by spec id; null: the first visible one). */
+  inspectId = $state<number | null>(null);
+  insightTab = $state<InsightTab>('neurons');
   // ---- training
   epochs = $state(1600);
   /** Epochs per frame, a power of two. */
@@ -462,6 +642,23 @@ export class Playground {
     return this.runs.filter((r) => shown.includes(r.spec.id));
   });
   maxEpoch = $derived(this.runs.reduce((m, r) => Math.max(m, r.latest), 0));
+  /** The model in the Look inside card, and its run. */
+  inspected = $derived.by((): { spec: ModelSpec; run: ModelRun | null } | null => {
+    const shown = this.models.filter((m) => m.visible);
+    const spec = shown.find((m) => m.id === this.inspectId) ?? shown[0] ?? this.models[0] ?? null;
+    if (!spec) return null;
+    return { spec, run: this.runs.find((r) => r.spec.id === spec.id) ?? null };
+  });
+  /** Kinks of the inspected network at the epoch shown (marked on the fit plot). */
+  kinkMarks = $derived.by((): { id: number; xs: Float64Array } | null => {
+    const r = this.inspected?.run;
+    if (!r || this.mode !== 'live' || r.copies > 1 || r.spec.kind !== 'mlp') return null;
+    const cfg = this.configOf(r.spec);
+    if (cfg.kind !== 'mlp' || !canKink(cfg)) return null;
+    const w = r.weightsAt(this.viewEpoch);
+    const k = w ? kinkView(cfg, w.params) : null;
+    return k ? { id: r.spec.id, xs: k.xs } : null;
+  });
 
   status = $derived.by((): Status => {
     if (!this.runs.length) return 'ready';
@@ -479,7 +676,7 @@ export class Playground {
       const cfg = specConfig(m);
       const points = this.data ? this.data.trainY.length : this.n;
       if (cfg.kind !== 'mlp')
-        return classicalSeconds(cfg, points, FALLBACK_SPEED / this.deviceSpeed);
+        return classicalSeconds(cfg, points, FALLBACK_SPEED / this.deviceSpeed) * copiesOf(m);
       const params = paramCountOf(cfg);
       return this.onGpu && this.gpuSpeed
         ? estimateGpuSeconds(params, points, this.epochs, this.gpuSpeed)
@@ -492,7 +689,10 @@ export class Playground {
    *  Chrome). On the GPU, models share one graphics card, so their times add up. */
   estimateTotal = $derived.by(() => {
     const isNet = (i: number) => this.models[i]?.kind === 'mlp';
-    const nets = this.estimates.filter((_, i) => isNet(i));
+    // Every copy of an averaged network trains in its own worker.
+    const nets = this.estimates.flatMap((e, i) =>
+      isNet(i) ? new Array<number>(copiesOf(this.models[i])).fill(e) : [],
+    );
     const classic = Math.max(0, ...this.estimates.filter((_, i) => !isNet(i)));
     if (this.onGpu)
       return Math.max(
@@ -532,25 +732,37 @@ export class Playground {
     if (!data) return;
     run.wave = wave;
     run.status = 'ready';
-    run.trainer.start({
+    run.start({
       config: this.configOf(run.spec),
       data,
-      seed: run.spec.seed,
       epochs: this.epochs,
       epochsPerFrame: this.speed,
       backend: this.backend,
     });
     if (this.playing) {
-      run.trainer.play();
+      run.play();
       run.status = 'running';
     }
   }
 
+  /** Workers a run keeps busy (classical models fit in a moment and do not count). */
+  private workersOf = (r: ModelRun) => (r.spec.kind === 'mlp' ? r.copies : 0);
+
   private onRunDone = () => {
-    const next = this.runs.find((r) => r.status === 'queued');
-    // A model that waited for a free worker starts from epoch 0; finished models
-    // are replayed from their history in step with it.
-    if (next) this.startRun(next, ++this.waves);
+    // Models that waited for free workers start from epoch 0; finished models
+    // are replayed from their history in step with them.
+    let busy = this.runs
+      .filter((r) => r.status !== 'queued' && !r.finished)
+      .reduce((n, r) => n + this.workersOf(r), 0);
+    let wave = 0;
+    for (const r of this.runs) {
+      if (r.status !== 'queued') continue;
+      const need = this.workersOf(r);
+      if (busy > 0 && busy + need > this.maxWorkers) break;
+      if (!wave) wave = ++this.waves;
+      this.startRun(r, wave);
+      busy += need;
+    }
     if (this.runs.every((r) => r.finished)) this.playing = false;
   };
 
@@ -573,7 +785,7 @@ export class Playground {
   }
 
   private rebuild() {
-    for (const r of this.runs) r.trainer.dispose();
+    for (const r of this.runs) r.dispose();
     this.playing = false;
     this.replayEpoch = null;
     this.held = null;
@@ -615,9 +827,12 @@ export class Playground {
     this.runs = runs;
     this.waves = 0;
     // Classical models fit in a moment and then idle, so they do not take a worker slot.
-    let nets = 0;
+    let busy = 0;
     for (const r of runs) {
-      if (r.spec.kind !== 'mlp' || nets++ < this.maxWorkers) this.startRun(r, 0);
+      const need = this.workersOf(r);
+      if (need && busy > 0 && busy + need > this.maxWorkers) continue;
+      this.startRun(r, 0);
+      busy += need;
     }
   }
 
@@ -699,13 +914,10 @@ export class Playground {
     const window = 2 * this.speed;
     const active = this.runs.filter((r) => r.status !== 'queued' && !r.finished);
     for (const r of this.runs) {
-      if (!r.pendingSeq) continue;
+      if (!r.hasPending) continue;
       let pace = Infinity;
       for (const o of active) if (o.wave <= r.wave && o.latest < pace) pace = o.latest;
-      if (r.finished || r.latest <= pace + window) {
-        r.trainer.ack(r.pendingSeq);
-        r.pendingSeq = 0;
-      }
+      r.ack(pace + window);
     }
     requestAnimationFrame(this.loop);
   };
@@ -744,7 +956,7 @@ export class Playground {
     }
     for (const r of this.runs) {
       if (r.status === 'ready' || r.status === 'paused') {
-        r.trainer.play();
+        r.play();
         r.status = 'running';
       }
     }
@@ -759,7 +971,7 @@ export class Playground {
     this.playing = false;
     for (const r of this.runs) {
       if (r.status === 'running') {
-        if (this.mode === 'live') r.trainer.pause();
+        if (this.mode === 'live') r.pause();
         r.status = 'paused';
       }
     }
@@ -780,7 +992,7 @@ export class Playground {
           r.latest = Math.min(r.final, r.latest + 1);
           r.status = r.latest < r.final ? 'paused' : r.recordedDiverged ? 'diverged' : 'done';
         } else {
-          r.trainer.step(1);
+          r.step(1);
           r.status = 'paused';
         }
       }
@@ -789,7 +1001,7 @@ export class Playground {
 
   setSpeed(epochsPerFrame: number) {
     this.speed = epochsPerFrame;
-    if (this.mode === 'live') for (const r of this.runs) r.trainer.setSpeed(epochsPerFrame);
+    if (this.mode === 'live') for (const r of this.runs) r.setSpeed(epochsPerFrame);
   }
 
   /** Show the run as it was at `epoch` (pauses training). */
@@ -802,7 +1014,7 @@ export class Playground {
 
   dispose() {
     this.playing = false;
-    for (const r of this.runs) r.trainer.dispose();
+    for (const r of this.runs) r.dispose();
   }
 
   // ------------------------------------------------------------ models
@@ -839,11 +1051,12 @@ export class Playground {
   changeFamily(i: number, family: Family) {
     const m = this.models[i];
     if (!m || familyOf(m) === family) return;
-    const { id, color, seed, visible } = m;
+    const { id, color, seed, visible, copies } = m;
+    const keep = { id, visible, ...(copies && family !== 'gp' ? { copies } : {}) };
     const next: ModelSpec =
       family === 'mlp'
-        ? { ...defaultNet(color, seed), id, visible }
-        : { kind: 'classical', config: this.defaultFor(family), id, color, seed, visible };
+        ? { ...defaultNet(color, seed), ...keep }
+        : { kind: 'classical', config: this.defaultFor(family), color, seed, ...keep };
     this.models = this.models.map((s, k) => (k === i ? next : s));
   }
 
@@ -858,8 +1071,8 @@ export class Playground {
     this.models = this.models.map((m, k) => {
       if (k !== i) return m;
       if (m.kind === 'mlp') return { ...m, ...patch };
-      const { id, color, seed, visible } = { ...m, ...(patch as Partial<SpecBase>) };
-      return { ...m, id, color, seed, visible };
+      const { id, color, seed, visible, copies } = { ...m, ...(patch as Partial<SpecBase>) };
+      return { ...m, id, color, seed, visible, ...(copies ? { copies } : {}) };
     });
   }
 
@@ -925,6 +1138,7 @@ export class Playground {
         model: $state.snapshot(this.configOf(m)) as ModelConfig,
         seed: m.seed,
         visible: m.visible,
+        ...(copiesOf(m) > 1 ? { copies: copiesOf(m) } : {}),
       })),
       epochs: this.epochs,
       layout: this.layout,
@@ -953,7 +1167,13 @@ export class Playground {
       this.sigma = nz.sigma;
     if (nz.kind === 'uniform') this.sigma = nz.width / 2;
     this.models = s.models.map((m, i): ModelSpec => {
-      const common = { id: nextId++, color: i + 1, seed: m.seed, visible: m.visible };
+      const common = {
+        id: nextId++,
+        color: i + 1,
+        seed: m.seed,
+        visible: m.visible,
+        ...(m.copies && m.copies > 1 ? { copies: m.copies } : {}),
+      };
       const c = m.model;
       if (c.kind !== 'mlp') return { kind: 'classical', config: c, ...common };
       return {

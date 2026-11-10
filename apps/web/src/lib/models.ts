@@ -1,6 +1,7 @@
 // Model families as the playground sees them: names, defaults, validation of
 // configurations from links and files, and rough fitting-time estimates for the
 // classical models. Pure (no Svelte, no DOM).
+import { Rng } from '@xtraplaytion/dmath';
 import {
   MAX_DEGREE,
   MAX_DEPTH,
@@ -11,6 +12,7 @@ import {
   GP_MAX_POINTS,
   GP_TUNE_POINTS,
   type ClassicalConfig,
+  type Dataset,
   type KernelKind,
   type KernelPart,
 } from '@xtraplaytion/engine';
@@ -170,3 +172,21 @@ export function classicalSeconds(c: ClassicalConfig, points: number, slowdown = 
 
 /** Training points a Gaussian process uses for its final fit. */
 export const gpPointsUsed = (points: number) => Math.min(points, GP_MAX_POINTS);
+
+/** Weight seed of copy i of an averaged model (copy 0 is the model itself). */
+export const copySeed = (seed: number, i: number) => seed + 7919 * i;
+
+/** Training points drawn with replacement (seeded), sorted by x: what one copy of an
+ *  averaged classical model learns from. */
+export function bootstrapData(data: Dataset, seed: number): Dataset {
+  const n = data.trainY.length;
+  const rng = new Rng(seed, 9);
+  const idx = Array.from({ length: n }, () => rng.int(n)).sort(
+    (a, b) => data.trainX[a] - data.trainX[b] || a - b,
+  );
+  return {
+    ...data,
+    trainX: Float64Array.from(idx, (i) => data.trainX[i]),
+    trainY: Float64Array.from(idx, (i) => data.trainY[i]),
+  };
+}

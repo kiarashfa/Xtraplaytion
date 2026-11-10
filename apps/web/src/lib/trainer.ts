@@ -19,6 +19,8 @@ export interface TrainerEvents {
   frame?(f: FrameMsg): void;
   done?(reason: 'finished' | 'diverged', epoch: number): void;
   error?(message: string): void;
+  /** Weights sent on request (see snapshot()). */
+  snapshot?(epoch: number, params: Float32Array): void;
 }
 
 export interface StartOptions {
@@ -111,6 +113,9 @@ export class Trainer {
       case 'recovered':
         this.events.recovered?.(m.epoch, m.backend, m.reason);
         break;
+      case 'snapshot':
+        this.events.snapshot?.(m.epoch, m.params);
+        break;
     }
   }
 
@@ -136,6 +141,10 @@ export class Trainer {
   }
   setSpeed(epochsPerFrame: number) {
     this.post({ type: 'setSpeed', epochsPerFrame });
+  }
+  /** Asks for the network's current weights (answered through events.snapshot). */
+  snapshot() {
+    this.post({ type: 'snapshot' });
   }
   reset() {
     this.trainLoss.clear();

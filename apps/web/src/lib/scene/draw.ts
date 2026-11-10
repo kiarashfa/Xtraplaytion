@@ -122,7 +122,14 @@ export interface FitScene {
   /** A stroke in progress (data coordinates). */
   stroke?: { x: number; y: number }[];
   /** `band`: posterior std on the grid, drawn as a shaded ±2 std range. */
-  models: { ys: ArrayLike<number>; color: number; label?: string; band?: ArrayLike<number> }[];
+  models: {
+    ys: ArrayLike<number>;
+    color: number;
+    label?: string;
+    band?: ArrayLike<number>;
+    /** Kink positions (ReLU-type networks), marked along the bottom edge. */
+    kinks?: ArrayLike<number>;
+  }[];
   regionLabels: { train: string; gap: string; beyond: string } | null;
   handles: boolean;
   /** Highlighted band edge (dragging/hover): [band index, 0 = left, 1 = right] */
@@ -375,6 +382,25 @@ export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
       else ctx.moveTo(sx(f, p.x), sy(f, p.y));
     });
     ctx.stroke();
+  }
+
+  for (const m of s.models) {
+    if (!m.kinks || !m.kinks.length) continue;
+    const c = th.competitors[(m.color - 1) % th.competitors.length];
+    ctx.fillStyle = c;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    const y = f.y0 + f.h;
+    for (let i = 0; i < m.kinks.length; i++) {
+      const x = sx(f, m.kinks[i]);
+      if (x < f.x0 || x > f.x0 + f.w) continue;
+      ctx.moveTo(x, y - 7);
+      ctx.lineTo(x - 3.2, y);
+      ctx.lineTo(x + 3.2, y);
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
   if (s.crosshairX != null) {

@@ -539,9 +539,17 @@ def scores(pred):
             out[label] = np.sqrt(np.mean((pred[m] - t[m]) ** 2))
     return out`);
 
+  // Python names: the model's name without the copy count ("N1 ×5" gives N1).
+  const ids = state.models.map((_, i) =>
+    (names[i] ?? `M${i + 1}`).split(' ')[0].replace(/\W/g, ''),
+  );
   state.models.forEach((m, i) => {
-    const name = names[i] ?? `M${i + 1}`;
+    const name = ids[i];
     const c = m.model;
+    if (m.copies && m.copies > 1)
+      out.push(
+        `\n# On the site, ${name} is the average of ${m.copies} copies (${c.kind === 'mlp' ? 'different starting weights' : 'resampled training data'}). This script trains one.`,
+      );
     if (c.kind === 'mlp')
       out.push(
         flavor === 'pytorch'
@@ -553,7 +561,7 @@ def scores(pred):
 
   out.push(`
 preds = {}
-${state.models.map((_, i) => `preds["${names[i] ?? `M${i + 1}`}"] = train_${names[i] ?? `M${i + 1}`}()`).join('\n')}
+${ids.map((id) => `preds["${id}"] = train_${id}()`).join('\n')}
 for name, pred in preds.items():
     print(name, {k: round(float(v), 4) for k, v in scores(pred).items()})
 

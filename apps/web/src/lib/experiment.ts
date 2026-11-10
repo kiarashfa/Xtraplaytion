@@ -118,7 +118,8 @@ export function trainingIdentity(s: ExperimentState): string {
     s.valFraction,
     s.bands,
     s.epochs,
-    s.models.map((m) => [m.model, m.seed]),
+    // A copy count is appended only when there is one, so older keys stay the same.
+    s.models.map((m) => (m.copies ? [m.model, m.seed, m.copies] : [m.model, m.seed])),
     // Appended only when present, so formula experiments keep their identity.
     ...(s.source ? [s.source] : []),
   ]);

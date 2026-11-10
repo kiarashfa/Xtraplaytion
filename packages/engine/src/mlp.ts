@@ -249,6 +249,17 @@ export class MLP {
     return l1 * s1 + l2 * s2;
   }
 
+  /** Activations of layer l (0 = input, dims.length - 1 = output) from the last forward
+   *  pass, row-major [n x dims[l]]. Overwritten by the next forward pass. */
+  layerOutput(l: number): Float64Array {
+    return this.A[l];
+  }
+
+  /** Pre-activations of layer l (1..dims.length - 1) from the last forward pass. */
+  layerInput(l: number): Float64Array {
+    return this.Z[l];
+  }
+
   /** Predictions without dropout, in chunks so work buffers stay small. */
   predict(X: Float64Array, n: number, out: Float64Array): void {
     const chunk = 1024;

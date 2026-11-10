@@ -123,6 +123,9 @@
   --color-model: var(--xp-c1);
   --color-band: var(--xp-band);
   --color-band-edge: var(--xp-band-edge);
+  --color-band-ink: var(--xp-band-ink);
+  --color-interp-ink: var(--xp-interp-ink);
+  --color-extrap-ink: var(--xp-extrap-ink);
   --color-c1: var(--xp-c1);
   --color-c2: var(--xp-c2);
   --color-c3: var(--xp-c3);

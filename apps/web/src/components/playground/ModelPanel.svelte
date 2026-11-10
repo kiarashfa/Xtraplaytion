@@ -5,6 +5,7 @@
   import { formatDuration } from '../../lib/capability.ts';
   import {
     ACTIVATIONS,
+    copiesOf,
     dimsLabel,
     familyOf,
     LOSSES,
@@ -95,7 +96,7 @@
         <div class="flex items-center gap-0.5 ps-2.5 {m.visible ? '' : 'opacity-60'}">
           <div class="flex min-h-12 min-w-0 flex-1 flex-col justify-center py-1.5">
             <span class="flex items-center gap-2 text-[13px] font-semibold"
-              ><Swatch color={m.color} width={22} />{name}
+              ><Swatch color={m.color} width={22} /><span class="whitespace-nowrap">{name}</span>
               <span class="font-normal text-muted">{t(`family.${familyOf(m)}` as MessageKey)}</span
               ></span
             >
@@ -278,6 +279,40 @@
                   >
                 </span>
               </label>
+            {/if}
+            {#if m.kind === 'classical' && m.config.kind === 'gp'}
+              <p class="text-xs text-muted">{t('pg.copies.gp')}</p>
+            {:else}
+              {@const k = copiesOf(m)}
+              <div
+                class="flex flex-col gap-1 rounded-lg border border-line bg-surface-2 p-2"
+                data-copies
+              >
+                <div class="flex items-center gap-2">
+                  <label class="flex min-h-10 flex-1 items-center gap-2 text-[13px] font-semibold">
+                    <input
+                      type="checkbox"
+                      class="size-4 accent-[var(--xp-accent)]"
+                      checked={k > 1}
+                      onchange={(e) =>
+                        pg.updateModel(i, { copies: e.currentTarget.checked ? 5 : 1 })}
+                    />{t('pg.copies.label')}
+                  </label>
+                  {#if k > 1}
+                    <select
+                      class="xp-input w-20 font-mono"
+                      aria-label={t('pg.copies.count')}
+                      value={k}
+                      onchange={(e) => pg.updateModel(i, { copies: Number(e.currentTarget.value) })}
+                    >
+                      {#each [2, 3, 4, 5, 6, 7, 8] as n (n)}<option value={n}>{n}</option>{/each}
+                    </select>
+                  {/if}
+                </div>
+                <p class="text-xs text-muted">
+                  {k > 1 ? t('pg.copies.hint', { count: k }) : t('pg.copies.hintOff')}
+                </p>
+              </div>
             {/if}
           </div>
         {/if}

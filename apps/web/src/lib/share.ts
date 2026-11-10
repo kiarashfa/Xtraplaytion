@@ -24,6 +24,8 @@ export interface SharedModel {
   /** Seed for this model's initial weights (the data has its own seed). */
   seed: number;
   visible: boolean;
+  /** The model is the average of this many copies (2..8; absent = one model). */
+  copies?: number;
 }
 
 /** Version 4: the target can be a drawing or imported points (`source`; the formula is
@@ -55,6 +57,8 @@ export const LIMITS = {
   epochs: 100_000,
   exprLength: 1000,
   models: 6,
+  /** Copies an averaged model may have. */
+  copies: 8,
 };
 
 const ACTS: Activation[] = [
@@ -190,10 +194,12 @@ export function validateState(o: unknown): ExperimentState | null {
           ? validModel(r['model'])
           : (validModel(r['model']) ?? validClassical(r['model']));
       if (!model || !isNum(r['seed'])) return null;
+      const copies = isNum(r['copies']) ? Math.round(clamp(r['copies'], 1, LIMITS.copies)) : 1;
       models.push({
         model,
         seed: Math.round(clamp(r['seed'], 0, 2 ** 31 - 1)),
         visible: r['visible'] !== false,
+        ...(copies > 1 && model.kind !== 'gp' ? { copies } : {}),
       });
     }
   }

@@ -97,6 +97,7 @@
         ys: frame.grid,
         color: run.spec.color,
         ...(frame.band ? { band: frame.band } : {}),
+        ...(pg.kinkMarks && pg.kinkMarks.id === run.spec.id ? { kinks: pg.kinkMarks.xs } : {}),
       })),
       regionLabels: {
         train: t('pg.region.train'),

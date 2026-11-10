@@ -32,6 +32,9 @@ export type ToWorker =
   | { type: 'reset' }
   | { type: 'ack'; seq: number }
   | { type: 'dispose' }
+  /** Send the network's current weights (for insight views of networks too big for
+   *  per-frame weights). Answered with a 'snapshot' message; ignored for classical models. */
+  | { type: 'snapshot' }
   /** Behave as if the GPU device was lost (tests and diagnostics). */
   | { type: 'simulateDeviceLoss' };
 
@@ -54,6 +57,9 @@ export interface FrameMsg {
   band?: Float32Array;
   /** Build-up of a classical model. */
   stage?: StageInfo;
+  /** Network weights (transferred), for networks up to SNAPSHOT_PARAMS parameters. In the
+   *  network's own units (scaled data when the config has `scale`). */
+  params?: Float32Array;
   /** Smoothed training speed. */
   epochsPerSec: number;
   backend: Backend;
@@ -75,6 +81,7 @@ export type FromWorker =
   | FrameMsg
   | { type: 'done'; runId: string; epoch: number; reason: 'finished' | 'diverged' }
   | { type: 'error'; runId: string; message: string }
+  | { type: 'snapshot'; runId: string; epoch: number; params: Float32Array }
   /** The GPU was lost; training continues from `epoch` on `backend`. */
   | {
       type: 'recovered';

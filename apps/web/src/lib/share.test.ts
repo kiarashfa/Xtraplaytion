@@ -131,4 +131,21 @@ describe('share links', () => {
     expect(validateState({ ...state, v: 5 })).toBeNull();
     expect(await decodeState('not-a-real-link')).toBeNull();
   });
+
+  it('keeps the number of copies of averaged models (2..8, never for a GP)', async () => {
+    const withCopies: ExperimentState = {
+      ...state,
+      models: [
+        { model: model(10), seed: 1, visible: true, copies: 5 },
+        { model: classical[0], seed: 2, visible: true, copies: 30 },
+        { model: classical[5], seed: 3, visible: true, copies: 4 },
+      ],
+    };
+    const back = await decodeState(await encodeState(withCopies));
+    expect(back?.models.map((m) => m.copies)).toEqual([5, 8, undefined]);
+    expect(
+      validateState({ ...state, models: [{ model: model(4), seed: 1, copies: 1 }] })?.models[0]
+        .copies,
+    ).toBeUndefined();
+  });
 });

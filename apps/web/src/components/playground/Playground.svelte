@@ -8,11 +8,12 @@
     measureGpu,
     measureSpeed,
   } from '../../lib/capability.ts';
-  import { modelName, Playground } from '../../lib/playground.svelte.ts';
+  import { copiesOf, modelName, Playground } from '../../lib/playground.svelte.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import { getEntry, getResults } from '../../lib/library.ts';
   import { decodeState } from '../../lib/share.ts';
   import Icon from '../Icon.svelte';
+  import InsightCard from './InsightCard.svelte';
   import Tex from '../Tex.svelte';
   import DataPanel from './DataPanel.svelte';
   import FitPlot from './FitPlot.svelte';
@@ -21,7 +22,7 @@
   import ModelPanel from './ModelPanel.svelte';
   import RunBar from './RunBar.svelte';
   import Scrubber from './Scrubber.svelte';
-  import Swatch from './Swatch.svelte';
+  import Swatch, { COLOR_CLASS } from './Swatch.svelte';
   import TargetPanel from './TargetPanel.svelte';
 
   const t = useTranslations();
@@ -391,6 +392,28 @@
               <span class="h-3 w-4 rounded-sm bg-ink/15"></span>{t('pg.legend.band')}
             </li>
           {/if}
+          {#if pg.models.some((m) => m.visible && copiesOf(m) > 1)}
+            <li
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
+              title={t('pg.legend.spreadHint')}
+            >
+              <span class="h-3 w-4 rounded-sm bg-ink/15"></span>{t('pg.legend.spread')}
+            </li>
+          {/if}
+          {#if pg.kinkMarks && pg.inspected}
+            <li
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2"
+              data-legend-kinks
+            >
+              <svg width="10" height="8" viewBox="0 0 10 8" aria-hidden="true"
+                ><path
+                  d="M5 0 0.5 8h9z"
+                  fill="currentColor"
+                  class="fill-current {COLOR_CLASS[(pg.inspected.spec.color - 1) % 6]}"
+                /></svg
+              >{t('pg.legend.kinks', { name: modelName(pg.inspected.spec) })}
+            </li>
+          {/if}
         </ul>
         {#if pg.models.length > 1}
           <div
@@ -432,6 +455,8 @@
       <Scrubber {pg} />
       <p class="px-3.5 pb-3 text-xs text-muted">{t('pg.plot.hint')}</p>
     </section>
+
+    <InsightCard {pg} compact={mobile} />
 
     <div class="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
       <section class="xp-card" aria-labelledby="loss-title">

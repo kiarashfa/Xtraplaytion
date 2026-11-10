@@ -144,6 +144,7 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
         newTrainLoss.buffer,
         newValLoss.buffer,
         ...(fr.band ? [fr.band.buffer] : []),
+        ...(fr.params ? [fr.params.buffer] : []),
       ],
     );
   };
@@ -449,6 +450,20 @@ export function createHost(env: HostEnv): (msg: ToWorker) => void {
           if (run && init) {
             const n = Math.max(0, Math.min(msg.n, init.epochs - run.epoch));
             exec(() => advance(n));
+          }
+          return;
+        case 'snapshot':
+          if (run && init) {
+            const cfg = init;
+            const r = run;
+            const send = (epoch: number, params: ArrayLike<number>) => {
+              const p = Float32Array.from(params);
+              env.post({ type: 'snapshot', runId: cfg.runId, epoch, params: p }, [p.buffer]);
+            };
+            if (gpu) {
+              const h = gpu;
+              exec(() => h.run.checkpoint().then((cp) => send(cp.epoch, cp.params)));
+            } else if (r instanceof MLPRun) send(r.epoch, r.net.params);
           }
           return;
         case 'simulateDeviceLoss':

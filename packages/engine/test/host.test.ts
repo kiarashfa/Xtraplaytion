@@ -125,4 +125,32 @@ describe('worker host', () => {
     expect(h.frames().at(-1)?.epoch).toBe(0);
     expect(Array.from(lastFrame(h).grid)).toEqual(before);
   });
+
+  it('sends the weights with every frame of a small network, and on request', () => {
+    const h = harness();
+    h.send({ type: 'play' });
+    h.drain();
+    const f = lastFrame(h);
+    const direct = createRun(config, data, 5);
+    direct.step(f.epoch);
+    expect(f.params && Array.from(f.params)).toEqual(
+      Array.from(Float32Array.from(direct.net.params)),
+    );
+    h.send({ type: 'snapshot' });
+    const snap = h.out.at(-1);
+    expect(snap?.type).toBe('snapshot');
+    if (snap?.type !== 'snapshot') return;
+    expect(snap.epoch).toBe(f.epoch);
+    expect(Array.from(snap.params)).toEqual(Array.from(f.params ?? []));
+  });
+
+  it('leaves the weights out of frames of big networks and classical models', () => {
+    for (const c of [mlp({ hidden: [150, 150] }), { kind: 'poly' as const, degree: 3 }]) {
+      const out: FromWorker[] = [];
+      const handle = createHost({ post: (m) => out.push(m), schedule: (cb) => cb(), now: () => 0 });
+      handle({ type: 'init', runId: 'b', config: c, data, seed: 1, epochs: 5, epochsPerFrame: 5 });
+      const f = out.find((m): m is FrameMsg => m.type === 'frame');
+      expect(f?.params).toBeUndefined();
+    }
+  });
 });

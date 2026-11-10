@@ -374,6 +374,89 @@ const en = {
   'pg.share.loaded': 'Loaded the shared experiment.',
   'pg.share.bad': 'This link could not be read, so the default experiment is shown.',
   'pg.fit': 'Fit',
+  'pg.legend.spread': 'Copies disagree',
+  'pg.legend.spreadHint':
+    'Where the copies of an averaged model disagree: their average ±2 standard deviations.',
+  'pg.legend.kinks': '{name} kinks',
+  'pg.copies.label': 'Average of copies',
+  'pg.copies.count': 'Number of copies',
+  'pg.copies.hint':
+    'Each copy starts from different weights (classical models: a resampled data set). The line is their average and the band shows where they disagree. Training takes {count} times the work.',
+  'pg.copies.hintOff':
+    'Train several copies and average them. The band then shows where they disagree.',
+  'pg.copies.gp':
+    'A Gaussian process already shows its likely range, so it does not average copies.',
+
+  'ins.title': 'Look inside',
+  'ins.models': 'Model to look inside',
+  'ins.at': 'At epoch {epoch} · follows the scrubber',
+  'ins.atLatest': 'Latest weights, epoch {epoch}',
+  'ins.tab.neurons': 'Neurons',
+  'ins.tab.kinks': 'Kinks',
+  'ins.tab.waves': 'Waves',
+  'ins.tab.weights': 'Weights',
+  'ins.tab.map': 'Loss map',
+  'ins.need.model': 'Add or show a model to look inside it.',
+  'ins.need.truth': 'Waves need a true function to compare with: a formula or a drawing.',
+  'ins.need.net':
+    'This view looks inside a neural network. Pick a network, or open Waves, which works for every model.',
+  'ins.need.live':
+    'Recorded and saved runs keep only the curves, not the weights. Train it yourself to look inside.',
+  'ins.need.copies':
+    '{name} is an average of {count} copies. Turn the average off to look inside one network.',
+  'ins.need.kinks':
+    'Kinks exist only with ReLU, leaky ReLU, abs or identity activations. {name} is smooth everywhere.',
+  'ins.need.kinksBig': 'This network has too many pieces to count here.',
+  'ins.need.map':
+    'A loss map needs a network with at most 50,000 weights and not too many data points.',
+  'ins.need.weights': 'The weights appear here once the model starts training.',
+  'ins.big':
+    'Big networks do not keep their weights for every frame, so this shows the latest ones (epoch {epoch}).',
+  'ins.neurons.lead':
+    "{name}'s prediction (the thick line) is the sum of what its {count} last-layer neurons add. Each colored line is one neuron's share; the dashed grey line is the other {rest} together.",
+  'ins.neurons.leadAll':
+    "{name}'s prediction (the thick line) is the sum of what its {count} last-layer neurons add. Each colored line is one neuron's share.",
+  'ins.neurons.sizes': 'How much the biggest neurons add',
+  'ins.neurons.dead':
+    '{count} of {width} neurons in layer {layer} never switch on at the data, so they add nothing.',
+  'ins.kinks.lead':
+    '{name} is made of straight pieces. Each mark is a kink, where the slope changes: {count, plural, one {# kink} other {# kinks}} in all.',
+  'ins.kinks.train': 'Inside data',
+  'ins.kinks.gap': 'In the gap',
+  'ins.kinks.beyond': 'Beyond data',
+  'ins.kinks.outside': 'Off the plot',
+  'ins.kinks.straight':
+    'Before x = {left} and after x = {right} it is one straight line forever (slopes {sl} and {sr}). That is why these networks extrapolate in straight lines.',
+  'ins.kinks.none': '{name} has no kinks: it is one straight line.',
+  'ins.kinks.during': 'Kinks during training',
+  'ins.waves.bars': 'Waves in the target (grey) and still missing now (color), by k in sin(kx)',
+  'ins.waves.heat': 'Still missing during training: stronger color is more',
+  'ins.waves.axis': 'epoch',
+  'ins.waves.lead':
+    'Any curve can be built from waves. This shows which waves of the target {name} has not learned yet, inside the data.',
+  'ins.waves.note':
+    'Slow waves (bottom) usually fade first and fast ones much later: networks learn smooth shapes before details. Researchers call this spectral bias.',
+  'ins.waves.small':
+    'Works for every model, also recorded and saved runs. Fewer periods inside the data give blurrier peaks.',
+  'ins.weights.out': 'Output',
+  'ins.weights.layerN': 'Layer {n}',
+  'ins.weights.layer': '{name} · {count} weights · typical size {size}',
+  'ins.weights.grads': 'Gradient size per layer (log scale)',
+  'ins.weights.lead':
+    'How big the weights are, layer by layer, and how hard training still pushes them. Shrinking gradients mean the network is settling.',
+  'ins.map.empty':
+    'Map the training loss around the weights shown now. It trains nothing, but needs {passes} passes over the data.',
+  'ins.map.lead':
+    "The training loss around {name}'s weights at epoch {epoch}, along two random directions. The ring is where {name} sits ({loss}). Stronger color is lower.",
+  'ins.map.note':
+    'Each direction is scaled neuron by neuron, so maps of different networks compare fairly. A wide, flat valley usually means a sturdy fit.',
+  'ins.map.make': 'Map the loss here',
+  'ins.map.remap': 'Map at this epoch',
+  'ins.map.again': 'New directions',
+  'ins.map.busy': 'Mapping: {percent}%',
+  'ins.map.info': '{res} × {res} points · {time} s',
+  'ins.map.failed': 'The map could not be made ({message}).',
+
   'pg.legend.data': 'Data',
   'pg.legend.truth': 'True function',
   'pg.legend.drawing': 'Your drawing',

@@ -6,7 +6,7 @@ import { dimsOf, type MLPConfig, type ModelConfig } from '../config.ts';
 import type { Dataset } from '../data.ts';
 import { scoreGrid } from '../metrics.ts';
 import { MLP } from '../mlp.ts';
-import type { Frame } from '../run.ts';
+import { SNAPSHOT_PARAMS, type Frame } from '../run.ts';
 import {
   lossSource,
   matmulSource,
@@ -104,6 +104,9 @@ export class GpuRun {
   private readonly pipes = new Map<string, GPUComputePipeline>();
   /** Grid prediction read back with the last training chunk (saves a round trip). */
   private cachedGrid: Float32Array | null = null;
+  private cachedParams: Float32Array | null = null;
+  /** Small networks send their weights with every frame (insight views). */
+  private readonly snapshots: boolean;
   private cachedAt = -1;
   private disposed = false;
 
@@ -309,8 +312,9 @@ export class GpuRun {
       this.val.push(this.loss(nVal, 1, false, valOut, valY));
     }
     this.gridOut = evalNet(nGrid, gridX, this.grid);
+    this.snapshots = this.paramCount <= SNAPSHOT_PARAMS;
     this.staging = device.createBuffer({
-      size: (2 * CHUNK + nGrid) * 4,
+      size: (2 * CHUNK + nGrid + (this.snapshots ? this.total : 0)) * 4,
       usage: USAGE.MAP_READ | USAGE.COPY_DST,
     });
     this.buffers.push(this.staging);
@@ -526,6 +530,7 @@ export class GpuRun {
       if (lastChunk || left === 0) {
         const nGrid = this.data.gridX.length;
         this.cachedGrid = lastChunk ? losses.slice(2 * CHUNK, 2 * CHUNK + nGrid) : null;
+        this.cachedParams = lastChunk ? this.unpackParams(losses, 2 * CHUNK + nGrid) : null;
         this.cachedAt = this.ep;
       }
     }
@@ -544,6 +549,14 @@ export class GpuRun {
     const nGrid = this.data.gridX.length;
     if (gridToo) {
       enc.copyBufferToBuffer(this.gridOut, 0, this.staging, 2 * CHUNK * 4, nGrid * 4);
+      if (this.snapshots)
+        enc.copyBufferToBuffer(
+          this.params,
+          0,
+          this.staging,
+          (2 * CHUNK + nGrid) * 4,
+          this.total * 4,
+        );
     }
     q.submit([enc.finish()]);
     await this.staging.mapAsync(MAP_READ);
@@ -555,12 +568,16 @@ export class GpuRun {
   async frame(): Promise<Frame> {
     const nGrid = this.data.gridX.length;
     let grid: Float32Array;
+    let params: Float32Array | null;
     if (this.cachedGrid && this.cachedAt === this.ep) {
       grid = this.cachedGrid;
+      params = this.cachedParams;
       this.cachedGrid = null; // transferred by the caller
+      this.cachedParams = null;
     } else {
       const out = await this.run(0, true);
       grid = out.slice(2 * CHUNK, 2 * CHUNK + nGrid);
+      params = this.unpackParams(out, 2 * CHUNK + nGrid);
     }
     return {
       epoch: this.ep,
@@ -568,7 +585,18 @@ export class GpuRun {
       valLoss: this.valLoss.length ? this.valLoss[this.valLoss.length - 1] : NaN,
       grid,
       metrics: scoreGrid(grid, this.data),
+      ...(params ? { params } : {}),
     };
+  }
+
+  /** Weights in the CPU layout from a staging read at float offset `at` (small nets only). */
+  private unpackParams(out: Float32Array, at: number): Float32Array | null {
+    if (!this.snapshots) return null;
+    const flat = new Float32Array(this.paramCount);
+    for (const s of this.slices) {
+      for (let q = 0; q < s.count; q++) flat[s.cpu + q] = out[at + s.gpu + q];
+    }
+    return flat;
   }
 
   /** Parameters and optimizer state in the CPU layout (for restarts and fallback). */

@@ -35,8 +35,8 @@
         compact,
         // Losses up to the epoch shown, so a replay rewinds the loss curves too.
         series: runs.map((r) => ({
-          train: r.trainer.trainLoss.view().subarray(0, upTo),
-          val: r.trainer.valLoss.view().subarray(0, upTo),
+          train: r.trainLoss.view().subarray(0, upTo),
+          val: r.valLoss.view().subarray(0, upTo),
           color: r.spec.color,
         })),
       },

@@ -21,7 +21,12 @@ export interface Frame {
   band?: Float32Array;
   /** Build-up of a classical model. */
   stage?: StageInfo;
+  /** Network weights (layout of MLP), for networks up to SNAPSHOT_PARAMS parameters. */
+  params?: Float32Array;
 }
+
+/** Networks up to this many parameters send their weights with every frame. */
+export const SNAPSHOT_PARAMS = 20_000;
 
 export interface Model {
   readonly paramCount: number;
@@ -145,6 +150,9 @@ export class MLPRun implements Model {
       valLoss: this.valLoss.length ? this.valLoss[this.valLoss.length - 1] : NaN,
       grid: Float32Array.from(this.gridOut),
       metrics: scoreGrid(this.gridOut, this.data),
+      ...(this.net.paramCount <= SNAPSHOT_PARAMS
+        ? { params: Float32Array.from(this.net.params) }
+        : {}),
     };
   }
 

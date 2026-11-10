@@ -31,4 +31,18 @@ describe('copy as code', () => {
     const jax = generateCode('jax', { state: withModels, data, names: ['N1', 'P2', 'S3'] });
     expect(jax).toContain('optax.adam(');
   });
+
+  it('names averaged models like the site and says the site averages them', () => {
+    const avg = {
+      ...withModels,
+      models: withModels.models.map((m, i) => (i === 0 ? { ...m, copies: 5 } : m)),
+    };
+    const data = datasetOf(avg);
+    if (!data) throw new Error('no data');
+    const code = generateCode('pytorch', { state: avg, data, names: ['N1 ×5', 'P2', 'S3'] });
+    expect(code).toContain('def train_N1():');
+    expect(code).toContain('preds["N1"] = train_N1()');
+    expect(code).toContain('average of 5 copies');
+    expect(code).not.toContain('×');
+  });
 });

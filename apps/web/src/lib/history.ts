@@ -18,14 +18,20 @@ export interface StoredFrame {
   stage?: StageInfo;
 }
 
-interface Slot {
+interface Slot<T> {
   k: number;
-  frame: StoredFrame;
+  frame: T;
 }
 
-export class FrameHistory {
-  private slots: Slot[] = [];
-  private last: Slot | null = null;
+/** Network weights at one epoch (insight views). */
+export interface WeightSnapshot {
+  epoch: number;
+  params: Float32Array;
+}
+
+export class FrameHistory<T extends { epoch: number } = StoredFrame> {
+  private slots: Slot<T>[] = [];
+  private last: Slot<T> | null = null;
   private count = 0;
   private stride = 1;
   readonly cap: number;
@@ -34,7 +40,7 @@ export class FrameHistory {
     this.cap = Math.max(4, cap);
   }
 
-  add(f: StoredFrame) {
+  add(f: T) {
     if (this.last && f.epoch <= this.last.frame.epoch) {
       // A reset or replayed run: drop everything at or after this epoch.
       this.slots = this.slots.filter((s) => s.frame.epoch < f.epoch);
@@ -50,14 +56,14 @@ export class FrameHistory {
   }
 
   /** Stored frames in epoch order, including the latest one. */
-  get frames(): StoredFrame[] {
+  get frames(): T[] {
     const out = this.slots.map((s) => s.frame);
     if (this.last && out[out.length - 1] !== this.last.frame) out.push(this.last.frame);
     return out;
   }
 
   /** The newest stored frame at or before `epoch`. */
-  at(epoch: number): StoredFrame | null {
+  at(epoch: number): T | null {
     if (this.last && epoch >= this.last.frame.epoch) return this.last.frame;
     const fs = this.slots;
     if (!fs.length) return this.last?.frame ?? null;
@@ -72,7 +78,7 @@ export class FrameHistory {
     return fs[lo].frame;
   }
 
-  get latest(): StoredFrame | null {
+  get latest(): T | null {
     return this.last?.frame ?? null;
   }
 
@@ -83,8 +89,23 @@ export class FrameHistory {
     this.stride = 1;
   }
 
-  /** Approximate memory use in bytes (grids dominate). */
+  /** Approximate memory use in bytes (arrays dominate). */
   bytes(): number {
-    return this.frames.reduce((s, f) => s + f.grid.byteLength + (f.band?.byteLength ?? 0) + 64, 0);
+    let total = 0;
+    for (const f of this.frames) {
+      total += 64;
+      for (const v of Object.values(f)) if (ArrayBuffer.isView(v)) total += v.byteLength;
+    }
+    return total;
   }
+}
+
+/** Memory for weight snapshots per model. */
+export const SNAPSHOT_BUDGET = 8 * 1024 * 1024;
+
+/** Weight snapshots of one network, as many as fit the budget (at least 16). */
+export function snapshotHistory(paramCount: number): FrameHistory<WeightSnapshot> {
+  return new FrameHistory<WeightSnapshot>(
+    Math.min(600, Math.max(16, Math.floor(SNAPSHOT_BUDGET / (4 * Math.max(1, paramCount))))),
+  );
 }

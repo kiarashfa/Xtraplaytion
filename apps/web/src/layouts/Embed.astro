@@ -1,0 +1,32 @@
+---
+// Minimal page for <iframe> embeds: no header, footer, consent bar or analytics.
+import '../styles/global.css';
+import { localeInfo, useTranslations } from '../i18n';
+import { url } from '../lib/url.ts';
+import { SITE } from '../site.config.ts';
+
+interface Props {
+  title: string;
+}
+const t = useTranslations();
+const locale = localeInfo();
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang={locale.code} dir={locale.dir}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{`${title} · ${SITE.name}`}</title>
+    <meta name="description" content={t('site.description')} />
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href={new URL(url('playground/'), Astro.site)} />
+    <link rel="icon" href={url('favicon.svg')} type="image/svg+xml" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+  </head>
+  <body class="bg-transparent text-ink antialiased">
+    <slot />
+  </body>
+</html>

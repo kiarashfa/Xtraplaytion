@@ -1,0 +1,85 @@
+---
+import Base from '../layouts/Base.astro';
+import { useTranslations } from '../i18n';
+import { repoFile, url } from '../lib/url.ts';
+import { SITE } from '../site.config.ts';
+
+const t = useTranslations();
+---
+
+<Base title={t('about.title')} description={t('about.description')}>
+  <article class="lesson mx-auto max-w-[720px] py-8 sm:py-12">
+    <h1>{t('about.title')}</h1>
+    <p>
+      Xtraplaytion is a playground for fitting curves. Pick a function, choose where the data lives,
+      and watch neural networks and classical models learn it, live in your browser. Then see what
+      they do in the gaps and beyond the data, where they have to guess.
+    </p>
+
+    <h2>How it works</h2>
+    <ul>
+      <li>
+        Every model trains on your own device, in background threads of your browser. There is no
+        server doing the work, and none that receives your experiments.
+      </li>
+      <li>
+        On the processor, training uses its own math library, so the same experiment gives exactly
+        the same numbers in every browser. That is why a shared link rebuilds the same race.
+      </li>
+      <li>
+        On the graphics card (through WebGPU), training is much faster but approximate: graphics
+        cards compute with fewer digits, so results can differ a little from device to device.
+      </li>
+      <li>
+        A few heavy races come as recordings made on a graphics card, marked Recorded, so they play
+        on any device. You can always train them yourself.
+      </li>
+    </ul>
+
+    <h2 id="privacy">Privacy</h2>
+    <ul>
+      <li>Free, with no ads, no subscription and no account.</li>
+      <li>
+        Your experiments stay in your browser. A share link keeps the whole experiment after the #
+        sign of the address, the part that browsers never send to a server. The library keeps your
+        saves in this browser only.
+      </li>
+      <li>
+        One cookie, and only if you agree: if you accept in the cookie bar, Google Analytics counts
+        visits. It gets the address of the page without the part after the # sign, and nothing you
+        made. If you decline, nothing from Google loads at all.
+      </li>
+      <li>Races embedded in other sites never load analytics.</li>
+    </ul>
+    {SITE.analytics.enabled && (
+      <p>
+        <button type="button" class="xp-btn min-h-11" data-consent-open>
+          {t('footer.cookies')}
+        </button>
+      </p>
+    )}
+
+    <h2>What you make is yours</h2>
+    <p>
+      Images, videos, GIFs, files and saved experiments you create here belong to you. Use and share
+      them however you like, with or without credit. Exported videos carry a small Made with
+      Xtraplaytion line that you can switch off. Fonts inside them keep their own open licenses.
+    </p>
+
+    <h2>Embedding</h2>
+    <p>
+      You may put a race from this site on your own page: open the playground, press Share, then
+      Embed on a page, and paste the code. The race keeps pointing to this site and trains in each
+      visitor's browser. Please do not present Xtraplaytion as your own work.
+    </p>
+
+    <h2>License</h2>
+    <p>
+      Xtraplaytion is source-available, not open source. The source code is public under the{' '}
+      <a href={repoFile('LICENSE')}>KFA Source-Available License 1.0</a>. The components it builds
+      on and their licenses are listed in the{' '}
+      <a href={url('THIRD_PARTY.md')}>third-party notices</a>. The source lives on{' '}
+      <a href={SITE.repoUrl}>GitHub</a>.
+    </p>
+  </article>
+</Base>

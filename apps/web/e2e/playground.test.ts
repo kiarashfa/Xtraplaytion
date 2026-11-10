@@ -101,7 +101,8 @@ describe.each(targets)('$name', (target) => {
     const { context, page, problems } = await openPage(browser, target, baseURL);
     await page.goto('./playground/#preset=race-activations', { waitUntil: 'networkidle' });
     const rows = page.locator('table tbody tr');
-    await expect.poll(() => rows.count()).toBe(3);
+    // The first canvas of a fresh browser can take seconds (GPU process start-up).
+    await expect.poll(() => rows.count(), { timeout: 20000 }).toBe(3);
     await page.getByRole('button', { name: 'Play' }).click();
     await expect.poll(() => epochOf(page), { timeout: 20000 }).toBeGreaterThan(200);
     await page.getByRole('button', { name: 'Pause' }).click();
@@ -350,6 +351,36 @@ describe.each(targets)('$name', (target) => {
     expect(problems).toEqual([]);
     await context.close();
   }, 330_000);
+
+  // The lesson text says degree 7 and the strongest penalty win (measured on data seeds 7-9).
+  test('lesson 3: overfitting races end as the lesson says', async () => {
+    const { context, page, problems } = await openPage(browser, target, baseURL);
+    await page.goto('./lessons/noise-overfitting-and-regularization/', {
+      waitUntil: 'networkidle',
+    });
+    for (const [id, pick] of [
+      ['overfit-poly', 1],
+      ['overfit-net', 2],
+    ] as const) {
+      const race = page.locator(`[data-lesson-race=${id}]`);
+      await race.getByRole('radio').nth(pick).click();
+      await race.getByRole('button', { name: 'Run the race' }).click();
+      await expect
+        .poll(() => race.getByText(/Well spotted|Not this time/).textContent(), {
+          timeout: 200000,
+        })
+        .toMatch(/^Well spotted/);
+    }
+    // Previous and next lessons are linked at the end.
+    expect(await page.getByRole('link', { name: /Previous lesson/ }).getAttribute('href')).toMatch(
+      /width-depth-and-spectral-bias\/$/,
+    );
+    expect(await page.getByRole('link', { name: /Next lesson/ }).getAttribute('href')).toMatch(
+      /classical-models-out-of-range\/$/,
+    );
+    expect(problems).toEqual([]);
+    await context.close();
+  }, 420_000);
 
   test('lesson: predict, race, reveal', async () => {
     const { context, page, problems } = await openPage(browser, target, baseURL);

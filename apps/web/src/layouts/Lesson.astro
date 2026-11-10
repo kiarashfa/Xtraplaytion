@@ -1,5 +1,6 @@
 ---
 import { useTranslations } from '../i18n';
+import { LESSONS } from '../lib/lessons.ts';
 import { url } from '../lib/url.ts';
 import Base from './Base.astro';
 
@@ -9,6 +10,9 @@ interface Props {
 
 const t = useTranslations();
 const { frontmatter: fm } = Astro.props;
+const at = LESSONS.findIndex((l) => l.n === fm.n);
+const prev = at > 0 ? LESSONS[at - 1] : null;
+const next = at >= 0 && at + 1 < LESSONS.length ? LESSONS[at + 1] : null;
 ---
 
 <Base title={fm.title} description={fm.description}>
@@ -26,5 +30,25 @@ const { frontmatter: fm } = Astro.props;
     </p>
     <h1>{fm.title}</h1>
     <slot />
+    <nav class="not-prose mt-12 grid gap-3 sm:grid-cols-2" aria-label={t('lessons.more')}>
+      {prev && (
+        <a
+          href={url(`lessons/${prev.slug}/`)}
+          class="xp-card flex flex-col gap-1 p-4 hover:border-accent"
+        >
+          <span class="text-[13px] font-semibold text-muted">{t('lessons.prev')}</span>
+          <span class="font-bold">{prev.title}</span>
+        </a>
+      )}
+      {next && (
+        <a
+          href={url(`lessons/${next.slug}/`)}
+          class="xp-card flex flex-col gap-1 p-4 text-end hover:border-accent sm:col-start-2"
+        >
+          <span class="text-[13px] font-semibold text-muted">{t('lessons.next')}</span>
+          <span class="font-bold">{next.title}</span>
+        </a>
+      )}
+    </nav>
   </article>
 </Base>

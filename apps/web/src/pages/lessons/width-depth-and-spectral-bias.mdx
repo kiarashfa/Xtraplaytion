@@ -15,7 +15,7 @@ More neurons means more ways to bend a curve. So a bigger network should always 
 
 The target is a sum of three waves, `sin(x) + 0.5 sin(2x) + (1/3) sin(3x)`, from −10 to 10, with a little noise. Three ReLU networks with two hidden layers race on it. They differ only in width: 10, 100 and 1,000 neurons per layer. Same data, same starting seed, same optimizer (Adam), 1,600 epochs.
 
-The widest network has a million parameters, about a hundred times more than the middle one. Training it takes hours on a typical processor, so the race below is a recording made on a graphics card. In the playground you can train it yourself.
+The widest network has a million parameters, about a hundred times more than the middle one. On a typical processor each epoch takes about half a second, so a full race would take a quarter of an hour. The race below is a recording made on a graphics card. In the playground you can train it yourself.
 
 ## Predict first
 

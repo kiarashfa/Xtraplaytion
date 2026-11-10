@@ -5,9 +5,11 @@
 /* Theme is set on <html data-theme> by the inline head script. */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
-/* Design tokens (approved mocks). Competitor colors are Okabe-Ito based and each one
+/* Design tokens (approved mocks). [data-scene-theme] forces one theme on an element
+   (export previews read the tokens of the theme chosen for the video). Competitor colors are Okabe-Ito based and each one
    is paired with a dash pattern in the plots, so color is never the only cue. */
-:root {
+:root,
+[data-scene-theme='light'] {
   color-scheme: light;
   --xp-bg: #f3f5f9;
   --xp-surface: #ffffff;
@@ -44,7 +46,8 @@
   --xp-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 4px 16px rgb(15 23 42 / 0.05);
 }
 
-:root[data-theme='dark'] {
+:root[data-theme='dark'],
+[data-scene-theme='dark'] {
   color-scheme: dark;
   --xp-bg: #090e1a;
   --xp-surface: #101827;
@@ -241,6 +244,14 @@
     margin: 0 0 16px;
     font-size: 17px;
     line-height: 1.65;
+    list-style: disc;
+    padding-inline-start: 1.3em;
+  }
+  .lesson > ul > li + li {
+    margin-top: 6px;
+  }
+  .lesson > ul > li::marker {
+    color: var(--xp-faint);
   }
   .lesson > h1 + p {
     font-size: 19px;
@@ -252,7 +263,7 @@
     font-weight: 700;
     letter-spacing: -0.01em;
   }
-  .lesson a:not(.xp-btn) {
+  .lesson a:not(.xp-btn, .xp-card) {
     color: var(--xp-accent);
     text-decoration: underline;
     text-underline-offset: 3px;

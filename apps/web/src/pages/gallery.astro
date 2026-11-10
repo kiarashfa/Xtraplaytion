@@ -1,0 +1,58 @@
+---
+import GalleryThumb from '../components/gallery/GalleryThumb.svelte';
+import { useTranslations } from '../i18n';
+import Base from '../layouts/Base.astro';
+import { GALLERY } from '../lib/gallery.ts';
+import { LESSONS } from '../lib/lessons.ts';
+import { url } from '../lib/url.ts';
+
+const t = useTranslations();
+const lessonOf = (slug?: string) => LESSONS.find((l) => l.slug === slug);
+---
+
+<Base title={t('gallery.title')} description={t('gallery.description')}>
+  <section class="py-8 sm:py-12">
+    <h1 class="text-4xl font-bold tracking-tight">{t('gallery.title')}</h1>
+    <p class="mt-3 max-w-2xl text-lg text-muted">{t('gallery.lead')}</p>
+    <ul class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {GALLERY.map((g) => {
+        const lesson = lessonOf(g.lesson);
+        return (
+          <li
+            id={g.id}
+            class="xp-card flex scroll-mt-4 flex-col overflow-hidden"
+            data-gallery={g.id}
+          >
+            <a
+              href={url(`playground/#preset=${g.id}`)}
+              class="block border-b border-line bg-surface-2 p-1.5"
+            >
+              <GalleryThumb
+                client:only="svelte"
+                id={g.id}
+                label={t('gallery.thumb', { title: g.title })}
+              >
+                <div slot="fallback" class="aspect-video w-full" />
+              </GalleryThumb>
+            </a>
+            <div class="flex flex-1 flex-col gap-1.5 p-4">
+              <h2 class="text-lg font-bold tracking-tight">{g.title}</h2>
+              <p class="flex-1 text-[14.5px] text-muted">{g.text}</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <a href={url(`playground/#preset=${g.id}`)} class="xp-btn xp-btn-primary min-h-11">
+                  {t('gallery.open')}
+                </a>
+                {lesson && (
+                  <a href={url(`lessons/${lesson.slug}/`)} class="xp-btn min-h-11">
+                    {t('lessons.lesson', { n: lesson.n })}
+                  </a>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+    <p class="mt-8 text-muted">{t('gallery.note')}</p>
+  </section>
+</Base>

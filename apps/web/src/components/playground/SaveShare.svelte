@@ -14,6 +14,7 @@
   import { thumbnail } from '../../lib/thumbnail.ts';
   import { url } from '../../lib/url.ts';
   import Icon from '../Icon.svelte';
+  import EmbedCode from './EmbedCode.svelte';
 
   const {
     pg,
@@ -28,6 +29,7 @@
   let savedNote = $state('');
   let saveError = $state('');
   let linkTooBig = $state(false);
+  let embedding = $state(false);
   let root = $state<HTMLDivElement>();
   let fileInput = $state<HTMLInputElement>();
 
@@ -47,6 +49,7 @@
     savedNote = '';
     saveError = '';
     linkTooBig = false;
+    embedding = false;
     if (open === which) {
       open = null;
       return;
@@ -229,58 +232,74 @@
       role="dialog"
       aria-label={t('pg.share')}
     >
-      <button type="button" class="xp-menuitem" onclick={copyLink} data-share-link>
-        <Icon name="link" size={16} /><span class="flex flex-col items-start"
-          ><span class="font-semibold">{t('pg.share.link')}</span><span class="text-xs text-muted"
-            >{t('pg.share.linkHint')}</span
-          ></span
-        >
-      </button>
-      {#if linkTooBig}
-        <p class="px-2.5 pb-1 text-xs text-bad" role="alert" data-link-too-big>
-          {t('pg.share.tooBig')}
-        </p>
-      {/if}
-      <button type="button" class="xp-menuitem" onclick={download} data-share-download>
-        <Icon name="download" size={16} /><span class="flex flex-col items-start"
-          ><span class="font-semibold">{t('pg.share.download')}</span><span
-            class="text-xs text-muted">{t('pg.share.downloadHint')}</span
-          ></span
-        >
-      </button>
-      <button type="button" class="xp-menuitem" onclick={() => fileInput?.click()}>
-        <Icon name="folder" size={16} /><span class="font-semibold">{t('pg.share.open')}</span>
-      </button>
-      <hr class="my-1 border-line" />
-      {#if hasNets}
-        <button
-          type="button"
-          class="xp-menuitem"
-          onclick={() => copyCode('pytorch')}
-          data-code="pytorch"
-        >
-          <Icon name="code" size={16} /><span class="flex flex-col items-start"
-            ><span class="font-semibold">{t('pg.code.pytorch')}</span><span
-              class="text-xs text-muted">{t('pg.code.hint')}</span
-            ></span
-          >
-        </button>
-        <button type="button" class="xp-menuitem" onclick={() => copyCode('jax')} data-code="jax">
-          <Icon name="code" size={16} /><span class="font-semibold">{t('pg.code.jax')}</span>
-        </button>
+      {#if embedding}
+        <EmbedCode {pg} {say} onback={() => (embedding = false)} />
       {:else}
-        <button
-          type="button"
-          class="xp-menuitem"
-          onclick={() => copyCode('pytorch')}
-          data-code="python"
-        >
-          <Icon name="code" size={16} /><span class="flex flex-col items-start"
-            ><span class="font-semibold">{t('pg.code.python')}</span><span
-              class="text-xs text-muted">{t('pg.code.hint')}</span
+        <button type="button" class="xp-menuitem" onclick={copyLink} data-share-link>
+          <Icon name="link" size={16} /><span class="flex flex-col items-start"
+            ><span class="font-semibold">{t('pg.share.link')}</span><span class="text-xs text-muted"
+              >{t('pg.share.linkHint')}</span
             ></span
           >
         </button>
+        {#if linkTooBig}
+          <p class="px-2.5 pb-1 text-xs text-bad" role="alert" data-link-too-big>
+            {t('pg.share.tooBig')}
+          </p>
+        {/if}
+        <button
+          type="button"
+          class="xp-menuitem"
+          onclick={() => (embedding = true)}
+          data-share-embed
+        >
+          <Icon name="code" size={16} /><span class="flex flex-col items-start"
+            ><span class="font-semibold">{t('embed.code.heading')}</span><span
+              class="text-xs text-muted">{t('embed.code.menuHint')}</span
+            ></span
+          >
+        </button>
+        <button type="button" class="xp-menuitem" onclick={download} data-share-download>
+          <Icon name="download" size={16} /><span class="flex flex-col items-start"
+            ><span class="font-semibold">{t('pg.share.download')}</span><span
+              class="text-xs text-muted">{t('pg.share.downloadHint')}</span
+            ></span
+          >
+        </button>
+        <button type="button" class="xp-menuitem" onclick={() => fileInput?.click()}>
+          <Icon name="folder" size={16} /><span class="font-semibold">{t('pg.share.open')}</span>
+        </button>
+        <hr class="my-1 border-line" />
+        {#if hasNets}
+          <button
+            type="button"
+            class="xp-menuitem"
+            onclick={() => copyCode('pytorch')}
+            data-code="pytorch"
+          >
+            <Icon name="code" size={16} /><span class="flex flex-col items-start"
+              ><span class="font-semibold">{t('pg.code.pytorch')}</span><span
+                class="text-xs text-muted">{t('pg.code.hint')}</span
+              ></span
+            >
+          </button>
+          <button type="button" class="xp-menuitem" onclick={() => copyCode('jax')} data-code="jax">
+            <Icon name="code" size={16} /><span class="font-semibold">{t('pg.code.jax')}</span>
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="xp-menuitem"
+            onclick={() => copyCode('pytorch')}
+            data-code="python"
+          >
+            <Icon name="code" size={16} /><span class="flex flex-col items-start"
+              ><span class="font-semibold">{t('pg.code.python')}</span><span
+                class="text-xs text-muted">{t('pg.code.hint')}</span
+              ></span
+            >
+          </button>
+        {/if}
       {/if}
     </div>
   {/if}

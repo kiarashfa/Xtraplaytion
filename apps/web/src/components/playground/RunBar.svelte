@@ -4,6 +4,7 @@
   import type { Playground } from '../../lib/playground.svelte.ts';
   import Icon from '../Icon.svelte';
   import SaveShare from './SaveShare.svelte';
+  import type { Component } from 'svelte';
 
   const {
     pg,
@@ -34,6 +35,14 @@
     return formatDuration(((pg.epochs - pg.clock) / rate) * rounds);
   });
   const nf = new Intl.NumberFormat('en');
+  // The export dialog and its encoders load on first use.
+  let Exporter = $state<Component<{ pg: Playground; onclose: () => void }> | null>(null);
+  let exporting = $state(false);
+  async function openExport() {
+    pg.pause();
+    Exporter ??= (await import('./ExportDialog.svelte')).default;
+    exporting = true;
+  }
   // What trains where: the runs' real backends once known, the expected one before.
   const where = $derived.by((): 'cpu' | 'gpu' | 'mixed' | 'recorded' | 'saved' => {
     if (pg.mode === 'recorded') return pg.recordedKind === 'saved' ? 'saved' : 'recorded';
@@ -127,5 +136,18 @@
       <span class="size-1.5 rounded-full bg-current"></span>{t(`pg.run.backend.${where}`)}
     </span>
     <SaveShare {pg} {compact} {say} />
+    <button
+      type="button"
+      class="xp-btn min-h-11"
+      disabled={!pg.runs.length}
+      onclick={openExport}
+      data-export
+      ><Icon name="video" />{#if !compact}{t('export.open')}{/if}<span class="sr-only"
+        >{compact ? t('export.open') : ''}</span
+      ></button
+    >
   </div>
 </div>
+{#if exporting && Exporter}
+  <Exporter {pg} onclose={() => (exporting = false)} />
+{/if}

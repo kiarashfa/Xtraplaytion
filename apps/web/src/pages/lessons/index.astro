@@ -1,33 +1,11 @@
 ---
 import { useTranslations } from '../../i18n';
 import Base from '../../layouts/Base.astro';
+import { LESSONS } from '../../lib/lessons.ts';
 import { url } from '../../lib/url.ts';
 
 const t = useTranslations();
-const lessons = [
-  {
-    n: 1,
-    slug: 'activations-and-extrapolation',
-    title: 'Activations and extrapolation',
-    summary: 'Three networks, one gap in the data. Guess which one fills it, then watch them race.',
-    minutes: 6,
-  },
-  {
-    n: 2,
-    slug: 'width-depth-and-spectral-bias',
-    title: 'Width, depth and spectral bias',
-    summary: 'A thousand neurons against ten. Then watch every network learn the slow wave first.',
-    minutes: 7,
-  },
-  {
-    n: 4,
-    slug: 'classical-models-out-of-range',
-    title: 'Classical models out of range',
-    summary:
-      'Polynomials explode, Fourier series repeat, trees go flat. See how six models guess beyond the data.',
-    minutes: 7,
-  },
-];
+const lessons = LESSONS;
 ---
 
 <Base title={t('lessons.title')} description={t('lessons.description')}>

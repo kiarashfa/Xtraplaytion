@@ -113,7 +113,12 @@ export interface NetSpec extends SpecBase {
   optimizer: OptimizerKind;
   lr: number;
   loss: LossKind;
+  /** L2 penalty on the weights ("keep weights small"); absent: none. */
+  l2?: number;
 }
+
+/** Strengths offered for the L2 penalty (0: off). */
+export const L2_STEPS = [0, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1];
 
 export interface ClassicSpec extends SpecBase {
   kind: 'classical';
@@ -143,6 +148,7 @@ export function netConfig(s: NetSpec): MLPConfig {
       ...(s.optimizer === 'adamw' ? { weightDecay: 0.01 } : {}),
     },
     loss: { kind: s.loss, ...(s.loss === 'huber' ? { delta: 0.5 } : {}) },
+    ...(s.l2 ? { l2: s.l2 } : {}),
   });
 }
 
@@ -649,8 +655,12 @@ export class Playground {
     if (!spec) return null;
     return { spec, run: this.runs.find((r) => r.spec.id === spec.id) ?? null };
   });
+  /** Mark the inspected network's kinks on the fit plot (the playground's Look inside card;
+   *  lessons and embeds have no inspector, so they turn it off). */
+  kinksOnPlot = true;
   /** Kinks of the inspected network at the epoch shown (marked on the fit plot). */
   kinkMarks = $derived.by((): { id: number; xs: Float64Array } | null => {
+    if (!this.kinksOnPlot) return null;
     const r = this.inspected?.run;
     if (!r || this.mode !== 'live' || r.copies > 1 || r.spec.kind !== 'mlp') return null;
     const cfg = this.configOf(r.spec);
@@ -1182,6 +1192,7 @@ export class Playground {
         optimizer: c.optimizer.kind,
         lr: c.optimizer.lr,
         loss: c.loss.kind,
+        ...(c.l2 > 0 ? { l2: c.l2 } : {}),
         ...common,
       };
     });

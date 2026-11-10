@@ -73,6 +73,7 @@ export default defineConfig({
         "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com",
         "font-src 'self'",
         "worker-src 'self' blob:",
+        "media-src 'self' blob:",
         "object-src 'none'",
         "base-uri 'none'",
         "form-action 'none'",

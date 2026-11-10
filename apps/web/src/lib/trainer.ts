@@ -82,7 +82,14 @@ export class Trainer {
     const id = String(++this.runId);
     this.trainLoss.clear();
     this.valLoss.clear();
-    const w = new Worker(new URL('../workers/train.ts', import.meta.url), { type: 'module' });
+    let w: Worker;
+    try {
+      w = new Worker(new URL('../workers/train.ts', import.meta.url), { type: 'module' });
+    } catch {
+      // Sandboxed frames (opaque origin) may not start workers at all.
+      queueMicrotask(() => this.events.error?.('workers unavailable'));
+      return;
+    }
     this.worker = w;
     w.onmessage = (e: MessageEvent<FromWorker>) => this.receive(id, e.data);
     w.onerror = (e) => this.events.error?.(e.message || 'worker error');

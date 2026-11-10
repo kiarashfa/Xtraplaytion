@@ -1,0 +1,70 @@
+---
+layout: ../../layouts/Lesson.astro
+title: Noise, overfitting and regularization
+description: Real measurements are noisy. A model with enough freedom to hit every point learns the noise too. Watch it happen, then tame it with a penalty on big weights.
+n: 3
+minutes: 7
+---
+
+import LessonRace from '../../components/lesson/LessonRace.svelte';
+import { url as siteUrl } from '../../lib/url.ts';
+
+Real data is never clean. Every measurement carries a little error, and a model cannot tell which part of a point is the truth and which part is noise. Give a model enough freedom and it will happily learn both.
+
+## The setup
+
+The target is the wave `sin(1.5x)` between −3 and 3. We only see 24 noisy samples of it: each point is pushed up or down by random noise of about a third of the wave's height. A fifth of the points are held back for validation (the hollow circles). The models never train on them; they only tell us how well a model does on points it has not seen.
+
+## Predict first
+
+Three polynomials fit the same points: degree 3, 7 and 15. A higher degree means more freedom to bend.
+
+<LessonRace
+  client:only="svelte"
+  preset="overfit-poly"
+  question="Inside the data, which polynomial ends closest to the true wave?"
+  metric="inside"
+  speed={4}
+/>
+
+## More freedom, more noise
+
+- **Degree 3 is too stiff.** It cannot bend enough to follow one and a half waves, so it misses the shape even where the data is clear. This is called **underfitting**.
+- **Degree 7 is about right.** It follows the wave and smooths over the noise, because it does not have enough freedom to chase every point.
+- **Degree 15 chases the noise.** It passes close to almost every training point, so its training error is the smallest of the three. Between the points, and above all near the ends, it swings far away from the wave. This is **overfitting**: the model learned the noise as if it were part of the function.
+
+Look at the loss plot: the solid training curves end lower for every extra degree, but the dashed validation curves do not follow. Degree 15 has the lowest training error and by far the worst validation error. A low training error alone proves very little.
+
+## Networks overfit too
+
+Now three identical tanh networks with two layers of 64 neurons train on 30 noisy points of the same wave, from the same starting weights, for 2,000 epochs. The only difference is a penalty on big weights, called **L2**. N1 has none, N2 a light one (0.001) and N3 a stronger one (0.01).
+
+<LessonRace
+  client:only="svelte"
+  preset="overfit-net"
+  question="Same networks, same data. Which one ends closest to the true wave?"
+  metric="inside"
+  speed={16}
+/>
+
+## Watch the two loss curves
+
+N1's training loss keeps falling until it is almost zero: by the end it hits every training point, noise and all. Its validation loss tells a different story. It is lowest after a few dozen epochs and then slowly rises, because every bend that fits the noise of a training point moves the curve away from the truth elsewhere.
+
+Scrub back to the first hundred epochs: N1 looked fine then. Stopping when the validation loss is lowest is a classic remedy called **early stopping**. It works, but it needs held-out data and a bit of luck with the timing.
+
+## Keep weights small
+
+The L2 penalty adds the sum of all squared weights, times a small number, to the loss. Sharp wiggles need large weights, and large weights now cost something, so the network prefers a smoother curve that misses the noise. N3 never reaches a tiny training loss, and that is the point: it gives up on the noise and keeps the wave.
+
+A penalty that is too strong flattens everything, and the network underfits like the degree 3 polynomial. The right strength depends on the data and the noise, which is why the validation points matter.
+
+> A good fit is not the one that touches every point. It is the one that would still fit the next point you measure.
+
+## Try it yourself
+
+<a href={siteUrl('playground/#preset=overfit-net')}>Open the network race in the playground</a>. The
+penalty lives under Advanced in each network's settings, as Keep weights small. Try 0.1 and watch
+the curve go flat. Then add more points: more data is the best cure for overfitting. Finally, switch
+the noise to Outliers and compare the MSE loss with Huber, which pays less attention to points that
+are far off.

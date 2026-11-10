@@ -72,7 +72,8 @@ export async function openPage(
   const external: string[] = [];
   await context.route('**/*', (route) => {
     const url = route.request().url();
-    if (url.startsWith(origin)) return route.continue();
+    // Blob URLs are local (WebKit sends them through the router too).
+    if (url.startsWith(origin) || url.startsWith('blob:')) return route.continue();
     external.push(url);
     return route.fulfill({ status: 200, contentType: 'text/javascript', body: '' });
   });

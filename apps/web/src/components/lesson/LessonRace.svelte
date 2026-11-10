@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import { useTranslations } from '../../i18n';
   import { dimsLabel, modelName, Playground } from '../../lib/playground.svelte.ts';
+  import { modelSummary } from '../../lib/describe.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import { url } from '../../lib/url.ts';
   import Icon from '../Icon.svelte';
@@ -26,6 +27,7 @@
   const t = useTranslations();
   const pg = new Playground();
   pg.alwaysRecorded = true;
+  pg.kinksOnPlot = false;
   let pick = $state<number | null>(null);
   let ready = $state(false);
 
@@ -53,9 +55,12 @@
     });
     return best;
   });
+  // "N1 [1, 64, 64, 1]", plus whatever tells the models apart (penalty, degree...).
   const name = (i: number) => {
     const m = pg.models[i];
-    return m ? `${modelName(m)}${m.kind === 'mlp' ? ` ${dimsLabel(m)}` : ''}` : '';
+    if (!m) return '';
+    if (m.kind !== 'mlp') return `${modelName(m)} · ${modelSummary(m, t)}`;
+    return `${modelName(m)} ${dimsLabel(m)}${m.l2 ? ` · L2 ${m.l2.toExponential(0)}` : ''}`;
   };
   const nf = new Intl.NumberFormat('en');
 </script>

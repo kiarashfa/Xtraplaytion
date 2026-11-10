@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { kernelChoice, FAMILIES, type Family } from '../../lib/models.ts';
+  import { modelSummary } from '../../lib/describe.ts';
+  import { FAMILIES, type Family } from '../../lib/models.ts';
   import { paramCountOf } from '@xtraplaytion/engine';
   import { useTranslations, type MessageKey } from '../../i18n';
   import { formatDuration } from '../../lib/capability.ts';
   import {
     ACTIVATIONS,
     copiesOf,
-    dimsLabel,
     familyOf,
+    L2_STEPS,
     LOSSES,
     modelName,
     OPTIMIZERS,
@@ -43,29 +44,7 @@
     );
   }
 
-  /** One line about a model's settings, under its name. */
-  function summary(m: ModelSpec): string {
-    if (m.kind === 'mlp') return `${dimsLabel(m)} · ${t(`act.${m.layers[0].act}` as MessageKey)}`;
-    const c = m.config;
-    switch (c.kind) {
-      case 'poly':
-        return t('pg.sum.poly', { n: c.degree });
-      case 'fourier':
-        return t('pg.sum.fourier', { n: c.harmonics });
-      case 'spline':
-        return t('pg.sum.spline', { n: c.segments });
-      case 'knn':
-        return t('pg.sum.knn', { n: c.k });
-      case 'tree':
-        return c.ensemble === 'single'
-          ? t('pg.sum.tree.single', { n: c.depth })
-          : t(`pg.sum.tree.${c.ensemble}`, { n: c.trees });
-      case 'gp':
-        return `${t(`kernel.${kernelChoice(c.kernel)}` as MessageKey)} · ${t(
-          c.tune ? 'pg.sum.gp.tune' : 'pg.sum.gp.fixed',
-        )}`;
-    }
-  }
+  const summary = (m: ModelSpec) => modelSummary(m, t);
 
   const seedLabel = (m: ModelSpec): MessageKey | null =>
     m.kind === 'mlp'
@@ -250,6 +229,28 @@
                   </select>
                 </label>
               </div>
+              <details class="group rounded-lg border border-line px-2.5 py-1" open={!!m.l2}>
+                <summary class="flex min-h-9 cursor-pointer items-center text-[13px] font-semibold"
+                  >{t('pg.model.advanced')}</summary
+                >
+                <label class="flex flex-col gap-1 pb-2"
+                  ><span class="xp-label">{t('pg.model.l2')}</span>
+                  <select
+                    class="xp-input font-mono"
+                    value={String(m.l2 ?? 0)}
+                    onchange={(e) => {
+                      const v = Number(e.currentTarget.value);
+                      pg.updateModel(i, { l2: v > 0 ? v : undefined });
+                    }}
+                    data-l2
+                  >
+                    {#each L2_STEPS as v (v)}<option value={String(v)}
+                        >{v ? v.toExponential(0) : t('pg.model.l2.off')}</option
+                      >{/each}
+                  </select>
+                  <span class="text-xs text-muted">{t('pg.model.l2.hint')}</span>
+                </label>
+              </details>
             {:else}
               <ClassicalEditor {pg} index={i} spec={m} />
             {/if}

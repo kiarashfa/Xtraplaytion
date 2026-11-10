@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import ConsentBar from '../components/ConsentBar.astro';
 import SiteFooter from '../components/SiteFooter.astro';
+import Icon from '../components/Icon.svelte';
 import ThemeToggle from '../components/ThemeToggle.svelte';
 import { localeInfo, useTranslations } from '../i18n';
 import { THEME_INIT_SCRIPT, THEME_KEY } from '../lib/theme.ts';
@@ -22,7 +23,9 @@ const here = Astro.url.pathname.replace(/\/+$/, '/');
 const nav = [
   { href: url('playground/'), label: t('nav.playground') },
   { href: url('lessons/'), label: t('nav.lessons') },
+  { href: url('gallery/'), label: t('nav.gallery') },
   { href: url('library/'), label: t('nav.library') },
+  { href: url('about/'), label: t('nav.about') },
 ];
 const pageTitle = title ? `${title} · ${SITE.name}` : SITE.name;
 const canonical = new URL(Astro.url.pathname, Astro.site);
@@ -57,19 +60,20 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     >
       <a href={url()} class="flex min-h-11 items-center gap-2 text-lg font-semibold tracking-tight">
         <img src={url('favicon.svg')} alt="" width="28" height="28" />
-        <span class="max-sm:sr-only">{SITE.name}</span>
+        <span>{SITE.name}</span>
       </a>
-      <nav class="flex gap-0.5 me-auto" aria-label={t('nav.main')}>
+      <nav class="me-auto hidden gap-0.5 md:flex" aria-label={t('nav.main')}>
         {nav.map((n) => (
           <a
             href={n.href}
             aria-current={here.startsWith(n.href) ? 'page' : undefined}
-            class="inline-flex min-h-11 items-center rounded-lg px-1 text-[13px] font-medium sm:px-2.5 sm:text-[14px] text-muted hover:text-ink aria-[current=page]:text-ink aria-[current=page]:underline aria-[current=page]:decoration-accent aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8"
+            class="inline-flex min-h-11 items-center rounded-lg px-2.5 text-[14px] font-medium text-muted hover:text-ink aria-[current=page]:text-ink aria-[current=page]:underline aria-[current=page]:decoration-accent aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8"
           >
             {n.label}
           </a>
         ))}
       </nav>
+      <span class="me-auto md:hidden" />
       <ThemeToggle
         client:load
         storageKey={THEME_KEY}
@@ -80,11 +84,47 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           dark: t('theme.dark'),
         }}
       />
+      {/* Phones and narrow windows: the links fold into a menu (works without JavaScript). */}
+      <details class="relative md:hidden" data-nav-menu>
+        <summary
+          class="grid size-11 cursor-pointer list-none place-items-center rounded-full border border-line bg-surface text-ink [&::-webkit-details-marker]:hidden"
+          aria-label={t('nav.menu')}
+        >
+          <Icon name="menu" />
+        </summary>
+        <nav
+          class="absolute end-0 top-full z-40 mt-2 flex w-56 flex-col rounded-xl border border-line-strong bg-surface p-1.5 shadow-[var(--xp-shadow)]"
+          aria-label={t('nav.main')}
+        >
+          {nav.map((n) => (
+            <a
+              href={n.href}
+              aria-current={here.startsWith(n.href) ? 'page' : undefined}
+              class="xp-menuitem text-[15px] font-medium aria-[current=page]:font-semibold aria-[current=page]:text-accent"
+            >
+              {n.label}
+            </a>
+          ))}
+        </nav>
+      </details>
     </header>
     <main id="main" class:list={['w-full flex-1', wide ? '' : 'mx-auto max-w-5xl px-4 sm:px-6']}>
       <slot />
     </main>
     <SiteFooter />
     <ConsentBar />
+    <script>
+      // Close the menu on a click outside it or on Escape.
+      const menu = document.querySelector<HTMLDetailsElement>('[data-nav-menu]');
+      document.addEventListener('click', (e) => {
+        if (menu?.open && !menu.contains(e.target as Node)) menu.open = false;
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && menu?.open) {
+          menu.open = false;
+          menu.querySelector('summary')?.focus();
+        }
+      });
+    </script>
   </body>
 </html>

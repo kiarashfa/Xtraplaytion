@@ -3,7 +3,7 @@ import type { Activation, ClassicalConfig } from '@xtraplaytion/engine';
 
 /** A suggested competitor: a network, or a classical model. */
 export type PresetModel =
-  | { hidden: number[]; act: Activation; lr?: number; seed?: number }
+  | { hidden: number[]; act: Activation; lr?: number; seed?: number; l2?: number }
   | { model: ClassicalConfig; seed?: number };
 
 export interface Preset {
@@ -169,6 +169,32 @@ export const PRESETS: Preset[] = [
         },
       },
     ],
+  }),
+  // Lesson 3: overfitting noisy data. Measured on the CPU over data seeds 7, 8 and 9:
+  // degree 7 ends closest to the truth inside the data every time (degree 15 explodes
+  // between the points), and the L2 penalty 1e-2 network beats 1e-3 and none every time.
+  p('overfit-poly', 'sin(1.5x)', [-3, 3], {
+    n: 24,
+    sigma: 0.3,
+    epochs: 400,
+    models: [
+      { model: { kind: 'poly', degree: 3 } },
+      { model: { kind: 'poly', degree: 7 } },
+      { model: { kind: 'poly', degree: 15 } },
+    ],
+    layout: 'stacked',
+  }),
+  p('overfit-net', 'sin(1.5x)', [-3, 3], {
+    n: 30,
+    sigma: 0.3,
+    epochs: 2000,
+    models: [
+      // Same starting weights: only the penalty differs.
+      { hidden: [64, 64], act: 'tanh', lr: 1e-2, seed: 1 },
+      { hidden: [64, 64], act: 'tanh', lr: 1e-2, seed: 1, l2: 1e-3 },
+      { hidden: [64, 64], act: 'tanh', lr: 1e-2, seed: 1, l2: 1e-2 },
+    ],
+    layout: 'stacked',
   }),
   p('waves', 'sin(x) + 0.5 sin(2x) + (1/3) sin(3x)', [-10, 10], {
     bands: [

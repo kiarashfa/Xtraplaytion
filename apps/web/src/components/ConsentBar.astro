@@ -1,6 +1,7 @@
 ---
 // Slim consent bar for Google Analytics. Nothing from Google loads until the visitor accepts.
 import { useTranslations } from '../i18n';
+import { url } from '../lib/url.ts';
 import { SITE } from '../site.config.ts';
 
 const t = useTranslations();
@@ -21,6 +22,9 @@ const button =
     <div class="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-3 text-sm sm:flex-row sm:items-center sm:gap-6 sm:px-6">
       <p class="flex-1">
         <strong class="font-semibold">{t('consent.title')}</strong> {t('consent.body')}
+        <a class="font-semibold underline underline-offset-2" href={url('about/#privacy')}>
+          {t('consent.more')}
+        </a>
       </p>
       {/* Both choices look exactly the same: declining is as easy as accepting. */}
       <div class="flex gap-2">

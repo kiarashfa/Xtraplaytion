@@ -1,10 +1,12 @@
-// Canvas2D scene renderer shared by the playground, lessons and (later) video export.
+// Canvas2D scene renderer shared by the playground, lessons and video export.
 // Works with any 2D context, including OffscreenCanvas in a worker. Coordinates are
 // CSS pixels; the caller sets the device-pixel-ratio transform.
 
 export type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 export interface SceneTheme {
+  bg: string;
+  line: string;
   plotBg: string;
   grid: string;
   gridStrong: string;
@@ -28,6 +30,8 @@ export interface SceneTheme {
 }
 
 const VARS: Record<keyof Omit<SceneTheme, 'competitors' | 'mono' | 'sans'>, string> = {
+  bg: '--xp-bg',
+  line: '--xp-line',
   plotBg: '--xp-plot-bg',
   grid: '--xp-grid',
   gridStrong: '--xp-grid-strong',
@@ -137,6 +141,12 @@ export interface FitScene {
   crosshairX?: number | null;
   tags?: { left?: string; right?: string };
   compact?: boolean;
+  /** Clear the canvas first (default true; exports draw onto a card background). */
+  clear?: boolean;
+  /** Soft glow under model lines (default true). */
+  glow?: boolean;
+  /** Device pixels per scene pixel (shadow blur ignores the transform). */
+  pixelRatio?: number;
 }
 
 export function fitLayout(s: FitScene): Frame2D {
@@ -229,7 +239,7 @@ export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
   const f = fitLayout(s);
   const fs = s.compact ? 10 : 11;
   ctx.save();
-  ctx.clearRect(0, 0, s.width, s.height);
+  if (s.clear !== false) ctx.clearRect(0, 0, s.width, s.height);
   ctx.fillStyle = th.plotBg;
   ctx.fillRect(f.x0, f.y0, f.w, f.h);
 
@@ -354,15 +364,17 @@ export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     // soft glow
-    ctx.save();
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = s.compact ? 5 : 7;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 10;
-    polyline(ctx, f, s.gridX, m.ys);
-    ctx.stroke();
-    ctx.restore();
+    if (s.glow !== false) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = s.compact ? 5 : 7;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10 * (s.pixelRatio ?? 1);
+      polyline(ctx, f, s.gridX, m.ys);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.strokeStyle = color;
     ctx.lineWidth = s.compact ? 2.2 : 2.6;
     ctx.setLineDash(DASHES[(m.color - 1) % DASHES.length]);
@@ -501,11 +513,13 @@ export interface LossScene {
   epochs: number;
   series: { train: ArrayLike<number>; val?: ArrayLike<number>; color: number }[];
   compact?: boolean;
+  /** Clear the canvas first (default true). */
+  clear?: boolean;
 }
 
 export function drawLoss(ctx: Ctx, s: LossScene, th: SceneTheme) {
   ctx.save();
-  ctx.clearRect(0, 0, s.width, s.height);
+  if (s.clear !== false) ctx.clearRect(0, 0, s.width, s.height);
   const pad = s.compact ? { l: 4, r: 6, t: 4, b: 4 } : { l: 48, r: 12, t: 10, b: 24 };
   const w = s.width - pad.l - pad.r;
   const h = s.height - pad.t - pad.b;

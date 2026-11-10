@@ -8,6 +8,8 @@
     share:
       '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10.5 5-3v9l-5-3z"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     dice: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2"/><circle cx="15.5" cy="15.5" r="1.2"/><circle cx="12" cy="12" r="1.2"/>',
     check: '<path d="m5 12 4.5 4.5L19 7"/>',

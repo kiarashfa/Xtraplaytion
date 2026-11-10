@@ -1,0 +1,15 @@
+---
+import Embed from '../components/embed/Embed.svelte';
+import { useTranslations } from '../i18n';
+import EmbedLayout from '../layouts/Embed.astro';
+
+const t = useTranslations();
+---
+
+<EmbedLayout title={t('embed.title')}>
+  <Embed client:only="svelte">
+    <p slot="fallback" class="p-4 text-muted">
+      {t('pg.loading')}
+    </p>
+  </Embed>
+</EmbedLayout>

@@ -97,6 +97,7 @@ export function presetState(p: Preset): ExperimentState {
               activations: m.hidden.map(() => m.act),
               optimizer: { kind: 'adam', lr: m.lr ?? p.lr },
               loss: { kind: 'mse' },
+              ...(m.l2 ? { l2: m.l2 } : {}),
             }),
       seed: m.seed ?? i + 1,
       visible: true,

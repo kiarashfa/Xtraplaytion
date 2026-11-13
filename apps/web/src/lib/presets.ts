@@ -1,9 +1,19 @@
 // Ready-made experiments. Names and descriptions are i18n keys: preset.<id>.name / .hint
-import type { Activation, ClassicalConfig } from '@xtraplaytion/engine';
+import type { Activation, ClassicalConfig, OptimizerKind } from '@xtraplaytion/engine';
 
 /** A suggested competitor: a network, or a classical model. */
 export type PresetModel =
-  | { hidden: number[]; act: Activation; lr?: number; seed?: number; l2?: number }
+  | {
+      hidden: number[];
+      act: Activation;
+      lr?: number;
+      seed?: number;
+      l2?: number;
+      /** Optimizer (default Adam). */
+      opt?: OptimizerKind;
+      /** Average of this many copies (different starting weights). */
+      copies?: number;
+    }
   | { model: ClassicalConfig; seed?: number };
 
 export interface Preset {
@@ -22,6 +32,8 @@ export interface Preset {
   layout?: 'overlay' | 'stacked';
   /** Ships a recorded run (src/recordings/<id>.xpr), played where live training would be slow. */
   recorded?: boolean;
+  /** Made for a lesson: not listed among the playground's presets (its link still works). */
+  unlisted?: boolean;
 }
 
 const p = (
@@ -195,6 +207,98 @@ export const PRESETS: Preset[] = [
       { hidden: [64, 64], act: 'tanh', lr: 1e-2, seed: 1, l2: 1e-2 },
     ],
     layout: 'stacked',
+  }),
+  // Lesson 5: one network, three learning rates; then three optimizers at the same rate.
+  p('lr-sweep', 'sin(2x) + 0.5x', [-3, 3], {
+    n: 120,
+    sigma: 0.05,
+    epochs: 1500,
+    models: [
+      { hidden: [32, 32], act: 'tanh', lr: 1e-4, seed: 1 },
+      { hidden: [32, 32], act: 'tanh', lr: 1e-2, seed: 1 },
+      { hidden: [32, 32], act: 'tanh', lr: 0.3, seed: 1 },
+    ],
+    layout: 'stacked',
+  }),
+  p('optimizers', 'sin(2x) + 0.5x', [-3, 3], {
+    n: 120,
+    sigma: 0.05,
+    epochs: 1500,
+    models: [
+      { hidden: [32, 32], act: 'tanh', lr: 1e-2, seed: 1, opt: 'sgd' },
+      { hidden: [32, 32], act: 'tanh', lr: 1e-2, seed: 1, opt: 'momentum' },
+      { hidden: [32, 32], act: 'tanh', lr: 1e-2, seed: 1, opt: 'adam' },
+    ],
+    layout: 'stacked',
+  }),
+  // Lesson 6: the same network on three layouts of training data.
+  p('layout-crowded', 'sin(1.5x) + 0.3x', [-6, 6], {
+    n: 200,
+    sigma: 0.05,
+    bands: [[-2, 2]],
+    hidden: [32, 32],
+    act: 'tanh',
+    lr: 1e-2,
+    models: [{ hidden: [32, 32], act: 'tanh', lr: 1e-2, seed: 1 }],
+  }),
+  p('layout-clusters', 'sin(1.5x) + 0.3x', [-6, 6], {
+    n: 24,
+    sigma: 0.05,
+    bands: [
+      [-6, -4.5],
+      [-0.75, 0.75],
+      [4.5, 6],
+    ],
+    models: [{ hidden: [32, 32], act: 'tanh', lr: 1e-2, seed: 1 }],
+  }),
+  p('layout-spread', 'sin(1.5x) + 0.3x', [-6, 6], {
+    n: 24,
+    sigma: 0.05,
+    bands: [[-6, 6]],
+    models: [{ hidden: [32, 32], act: 'tanh', lr: 1e-2, seed: 1 }],
+  }),
+  // Lesson 7: one network, the average of five copies of it, a Gaussian process.
+  p('ensemble', 'sin(x) + 0.3x', [-8, 8], {
+    n: 60,
+    sigma: 0.25,
+    bands: [
+      [-6, -1.5],
+      [1.5, 6],
+    ],
+    epochs: 2000,
+    models: [
+      { hidden: [64, 64], act: 'relu', lr: 1e-2, seed: 1 },
+      // Same seed: its first copy is N1 itself.
+      { hidden: [64, 64], act: 'relu', lr: 1e-2, seed: 1, copies: 5 },
+      {
+        model: {
+          kind: 'gp',
+          kernel: [{ kind: 'rbf', scale: 1, length: 2, period: 5 }],
+          noise: 0.1,
+          tune: true,
+        },
+      },
+    ],
+    layout: 'stacked',
+  }),
+  // Lesson 8: the visitor draws the target; the models only see the middle.
+  p('draw-challenge', 'abs(x)', [-6, 6], {
+    n: 60,
+    bands: [[-2.5, 2.5]],
+    models: [
+      { hidden: [32, 32], act: 'relu', lr: 1e-2, seed: 1 },
+      { hidden: [32, 32], act: 'tanh', lr: 1e-2, seed: 1 },
+      {
+        model: {
+          kind: 'gp',
+          kernel: [{ kind: 'rbf', scale: 1, length: 2, period: 5 }],
+          noise: 0.1,
+          tune: true,
+        },
+      },
+    ],
+    layout: 'overlay',
+    unlisted: true,
   }),
   p('waves', 'sin(x) + 0.5 sin(2x) + (1/3) sin(3x)', [-10, 10], {
     bands: [

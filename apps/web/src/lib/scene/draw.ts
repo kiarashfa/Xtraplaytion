@@ -147,6 +147,52 @@ export interface FitScene {
   glow?: boolean;
   /** Device pixels per scene pixel (shadow blur ignores the transform). */
   pixelRatio?: number;
+  /** On-screen plots: cache the parts that rarely change (see PlotLayers). */
+  layers?: PlotLayers;
+}
+
+/**
+ * Bitmap cache for the parts of an on-screen plot that rarely change (regions, grid, data
+ * points, ticks, labels). They are drawn once into an offscreen canvas and copied each frame;
+ * only the model lines are drawn live. Text and hundreds of small arcs made Chrome's GPU raster
+ * the bottleneck of a six-model race.
+ * Exports do not use it (each frame is drawn once anyway).
+ */
+export class PlotLayers {
+  #slots = new Map<string, { key: unknown[]; canvas: HTMLCanvasElement | OffscreenCanvas }>();
+
+  /** Copies layer `name` onto ctx at (0, 0, w, h), repainting it first when `key` changed. */
+  blit(ctx: Ctx, name: string, w: number, h: number, paint: (c: Ctx) => void, key: unknown[]) {
+    const ratio = ctx.getTransform().a || 1;
+    const pw = Math.max(1, Math.round(w * ratio));
+    const ph = Math.max(1, Math.round(h * ratio));
+    const full = [pw, ph, ratio, ...key];
+    let slot = this.#slots.get(name);
+    if (!slot || !sameKey(slot.key, full)) {
+      const canvas = slot?.canvas ?? newCanvas(pw, ph);
+      canvas.width = pw; // also clears it
+      canvas.height = ph;
+      const c = canvas.getContext('2d') as Ctx | null;
+      if (!c) return paint(ctx);
+      c.setTransform(ratio, 0, 0, ratio, 0, 0);
+      paint(c);
+      slot = { key: full, canvas };
+      this.#slots.set(name, slot);
+    }
+    ctx.drawImage(slot.canvas, 0, 0, w, h);
+  }
+}
+
+function newCanvas(w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
+  if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+function sameKey(a: unknown[], b: unknown[]) {
+  return a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 }
 
 export function fitLayout(s: FitScene): Frame2D {
@@ -238,117 +284,226 @@ function bandPath(
 export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
   const f = fitLayout(s);
   const fs = s.compact ? 10 : 11;
-  ctx.save();
-  if (s.clear !== false) ctx.clearRect(0, 0, s.width, s.height);
-  ctx.fillStyle = th.plotBg;
-  ctx.fillRect(f.x0, f.y0, f.w, f.h);
-
   const bands = s.bands.slice().sort((a, b) => a[0] - b[0]);
-  if (bands.length) {
-    const lo = sx(f, bands[0][0]);
-    const hi = sx(f, bands[bands.length - 1][1]);
-    ctx.fillStyle = th.extrapBg;
-    ctx.fillRect(f.x0, f.y0, lo - f.x0, f.h);
-    ctx.fillRect(hi, f.y0, f.x0 + f.w - hi, f.h);
-    ctx.fillStyle = th.interpBg;
-    for (let i = 0; i + 1 < bands.length; i++)
-      ctx.fillRect(sx(f, bands[i][1]), f.y0, sx(f, bands[i + 1][0]) - sx(f, bands[i][1]), f.h);
-    ctx.fillStyle = th.band;
-    for (const [a, b] of bands) ctx.fillRect(sx(f, a), f.y0, sx(f, b) - sx(f, a), f.h);
-  }
-
-  // grid
   const xt = niceTicks(f.xDomain[0], f.xDomain[1], s.compact ? 5 : 8);
   const yt = niceTicks(f.yDomain[0], f.yDomain[1], s.compact ? 4 : 5);
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = th.grid;
-  ctx.beginPath();
-  for (const v of yt) {
-    const y = Math.round(sy(f, v)) + 0.5;
-    ctx.moveTo(f.x0, y);
-    ctx.lineTo(f.x0 + f.w, y);
-  }
-  for (const v of xt) {
-    const x = Math.round(sx(f, v)) + 0.5;
-    ctx.moveTo(x, f.y0);
-    ctx.lineTo(x, f.y0 + f.h);
-  }
-  ctx.stroke();
-  if (f.yDomain[0] < 0 && f.yDomain[1] > 0) {
-    ctx.strokeStyle = th.gridStrong;
-    ctx.beginPath();
-    const y = Math.round(sy(f, 0)) + 0.5;
-    ctx.moveTo(f.x0, y);
-    ctx.lineTo(f.x0 + f.w, y);
-    ctx.stroke();
-  }
+  ctx.save();
+  if (s.clear !== false) ctx.clearRect(0, 0, s.width, s.height);
 
-  // band edges
-  ctx.strokeStyle = th.bandEdge;
-  ctx.lineWidth = 1.3;
-  ctx.setLineDash([5, 4]);
-  ctx.beginPath();
-  for (const [a, b] of bands) {
-    for (const x of [a, b]) {
-      const px = Math.round(sx(f, x)) + 0.5;
-      ctx.moveTo(px, f.y0);
-      ctx.lineTo(px, f.y0 + f.h);
+  // Everything under the model lines: regions, grid, true function, data points.
+  const under = (ctx: Ctx) => {
+    ctx.fillStyle = th.plotBg;
+    ctx.fillRect(f.x0, f.y0, f.w, f.h);
+
+    if (bands.length) {
+      const lo = sx(f, bands[0][0]);
+      const hi = sx(f, bands[bands.length - 1][1]);
+      ctx.fillStyle = th.extrapBg;
+      ctx.fillRect(f.x0, f.y0, lo - f.x0, f.h);
+      ctx.fillRect(hi, f.y0, f.x0 + f.w - hi, f.h);
+      ctx.fillStyle = th.interpBg;
+      for (let i = 0; i + 1 < bands.length; i++)
+        ctx.fillRect(sx(f, bands[i][1]), f.y0, sx(f, bands[i + 1][0]) - sx(f, bands[i][1]), f.h);
+      ctx.fillStyle = th.band;
+      for (const [a, b] of bands) ctx.fillRect(sx(f, a), f.y0, sx(f, b) - sx(f, a), f.h);
     }
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
+
+    // grid
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = th.grid;
+    ctx.beginPath();
+    for (const v of yt) {
+      const y = Math.round(sy(f, v)) + 0.5;
+      ctx.moveTo(f.x0, y);
+      ctx.lineTo(f.x0 + f.w, y);
+    }
+    for (const v of xt) {
+      const x = Math.round(sx(f, v)) + 0.5;
+      ctx.moveTo(x, f.y0);
+      ctx.lineTo(x, f.y0 + f.h);
+    }
+    ctx.stroke();
+    if (f.yDomain[0] < 0 && f.yDomain[1] > 0) {
+      ctx.strokeStyle = th.gridStrong;
+      ctx.beginPath();
+      const y = Math.round(sy(f, 0)) + 0.5;
+      ctx.moveTo(f.x0, y);
+      ctx.lineTo(f.x0 + f.w, y);
+      ctx.stroke();
+    }
+
+    // band edges
+    ctx.strokeStyle = th.bandEdge;
+    ctx.lineWidth = 1.3;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    for (const [a, b] of bands) {
+      for (const x of [a, b]) {
+        const px = Math.round(sx(f, x)) + 0.5;
+        ctx.moveTo(px, f.y0);
+        ctx.lineTo(px, f.y0 + f.h);
+      }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(f.x0, f.y0, f.w, f.h);
+    ctx.clip();
+
+    if (s.truth) {
+      ctx.strokeStyle = th.truth;
+      ctx.lineWidth = s.drawn ? 2.4 : 1.6;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash(s.drawn ? [] : [1.5, 4]);
+      polyline(ctx, f, s.gridX, s.truth);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (s.testX && s.testY) {
+      ctx.strokeStyle = th.muted;
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = 1.1;
+      const q = s.compact ? 2 : 2.5;
+      for (let i = 0; i < s.testX.length; i++) {
+        const px = sx(f, s.testX[i]);
+        const py = sy(f, s.testY[i]);
+        ctx.beginPath();
+        ctx.moveTo(px - q, py - q);
+        ctx.lineTo(px + q, py + q);
+        ctx.moveTo(px + q, py - q);
+        ctx.lineTo(px - q, py + q);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    const r = s.compact ? 2 : 2.6;
+    ctx.fillStyle = th.target;
+    ctx.globalAlpha = 0.85;
+    for (let i = 0; i < s.trainX.length; i++) {
+      ctx.beginPath();
+      ctx.arc(sx(f, s.trainX[i]), sy(f, s.trainY[i]), r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = th.target;
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < s.valX.length; i++) {
+      ctx.beginPath();
+      ctx.arc(sx(f, s.valX[i]), sy(f, s.valY[i]), r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.restore(); // clip
+  };
+  // Everything over them: frame, ticks, region labels, handles, tags.
+  const over = (ctx: Ctx) => {
+    // frame and ticks
+    ctx.strokeStyle = th.lineStrong;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(f.x0 + 0.5, f.y0 + 0.5, f.w - 1, f.h - 1);
+    ctx.fillStyle = th.faint;
+    ctx.font = `${fs}px ${th.mono}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (const v of xt) ctx.fillText(fmtTick(v), sx(f, v), f.y0 + f.h + 6);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (const v of yt) ctx.fillText(fmtTick(v), f.x0 - 6, sy(f, v));
+
+    // region labels (only where they fit)
+    if (s.regionLabels && bands.length) {
+      ctx.font = `600 ${fs - 1}px ${th.sans}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      const label = (a: number, b: number, text: string, color: string) => {
+        if (b - a < ctx.measureText(text).width + 10) return;
+        ctx.fillStyle = color;
+        ctx.fillText(text, (a + b) / 2, f.y0 - 9);
+      };
+      const lo = sx(f, bands[0][0]);
+      const hi = sx(f, bands[bands.length - 1][1]);
+      label(f.x0, lo, s.regionLabels.beyond, th.extrapInk);
+      label(hi, f.x0 + f.w, s.regionLabels.beyond, th.extrapInk);
+      for (const [a, b] of bands) label(sx(f, a), sx(f, b), s.regionLabels.train, th.bandInk);
+      for (let i = 0; i + 1 < bands.length; i++)
+        label(sx(f, bands[i][1]), sx(f, bands[i + 1][0]), s.regionLabels.gap, th.interpInk);
+    }
+
+    if (s.handles) {
+      bands.forEach(([a, b], bi) => {
+        [a, b].forEach((x, side) => {
+          const px = sx(f, x);
+          const py = f.y0 + f.h - 18;
+          const active = s.activeEdge && s.activeEdge[0] === bi && s.activeEdge[1] === side;
+          ctx.fillStyle = active ? th.bandEdge : th.surface;
+          ctx.strokeStyle = th.bandEdge;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.roundRect(px - 7, py - 13, 14, 26, 5);
+          ctx.fill();
+          ctx.stroke();
+          ctx.strokeStyle = active ? th.surface : th.bandEdge;
+          ctx.beginPath();
+          ctx.moveTo(px - 2, py - 6);
+          ctx.lineTo(px - 2, py + 6);
+          ctx.moveTo(px + 2, py - 6);
+          ctx.lineTo(px + 2, py + 6);
+          ctx.stroke();
+        });
+      });
+    }
+
+    if (s.tags?.left || s.tags?.right) {
+      ctx.font = `500 ${fs}px ${th.mono}`;
+      ctx.textBaseline = 'middle';
+      const tag = (text: string, x: number, right: boolean) => {
+        const w = ctx.measureText(text).width + 14;
+        const left = right ? x - w : x;
+        ctx.fillStyle = th.surface;
+        ctx.strokeStyle = th.lineStrong;
+        ctx.beginPath();
+        ctx.roundRect(left, f.y0 + 8, w, fs + 11, 5);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = th.ink;
+        ctx.textAlign = 'left';
+        ctx.fillText(text, left + 7, f.y0 + 8 + (fs + 11) / 2);
+      };
+      if (s.tags.left) tag(s.tags.left, f.x0 + 8, false);
+      if (s.tags.right) tag(s.tags.right, f.x0 + f.w - 8, true);
+    }
+  };
+
+  const domains = [f.xDomain[0], f.xDomain[1], f.yDomain[0], f.yDomain[1]];
+  const bandKey = bands.map((b) => b.join(',')).join(';');
+  if (s.layers) {
+    s.layers.blit(ctx, 'under', s.width, s.height, under, [
+      th,
+      s.compact,
+      s.drawn,
+      !!s.regionLabels,
+      ...domains,
+      bandKey,
+      s.trainX,
+      s.trainY,
+      s.valX,
+      s.valY,
+      s.gridX,
+      s.truth,
+      s.testX,
+      s.testY,
+    ]);
+  } else under(ctx);
 
   ctx.save();
   ctx.beginPath();
   ctx.rect(f.x0, f.y0, f.w, f.h);
   ctx.clip();
-
-  if (s.truth) {
-    ctx.strokeStyle = th.truth;
-    ctx.lineWidth = s.drawn ? 2.4 : 1.6;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.setLineDash(s.drawn ? [] : [1.5, 4]);
-    polyline(ctx, f, s.gridX, s.truth);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  if (s.testX && s.testY) {
-    ctx.strokeStyle = th.muted;
-    ctx.globalAlpha = 0.7;
-    ctx.lineWidth = 1.1;
-    const q = s.compact ? 2 : 2.5;
-    for (let i = 0; i < s.testX.length; i++) {
-      const px = sx(f, s.testX[i]);
-      const py = sy(f, s.testY[i]);
-      ctx.beginPath();
-      ctx.moveTo(px - q, py - q);
-      ctx.lineTo(px + q, py + q);
-      ctx.moveTo(px + q, py - q);
-      ctx.lineTo(px - q, py + q);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  const r = s.compact ? 2 : 2.6;
-  ctx.fillStyle = th.target;
-  ctx.globalAlpha = 0.85;
-  for (let i = 0; i < s.trainX.length; i++) {
-    ctx.beginPath();
-    ctx.arc(sx(f, s.trainX[i]), sy(f, s.trainY[i]), r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.strokeStyle = th.target;
-  ctx.lineWidth = 1.2;
-  for (let i = 0; i < s.valX.length; i++) {
-    ctx.beginPath();
-    ctx.arc(sx(f, s.valX[i]), sy(f, s.valY[i]), r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-
   // Uncertainty bands first, so every line stays on top of every band.
   for (const m of s.models) {
     if (!m.band) continue;
@@ -428,81 +583,21 @@ export function drawFit(ctx: Ctx, s: FitScene, th: SceneTheme): Frame2D {
   }
   ctx.restore(); // clip
 
-  // frame and ticks
-  ctx.strokeStyle = th.lineStrong;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(f.x0 + 0.5, f.y0 + 0.5, f.w - 1, f.h - 1);
-  ctx.fillStyle = th.faint;
-  ctx.font = `${fs}px ${th.mono}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  for (const v of xt) ctx.fillText(fmtTick(v), sx(f, v), f.y0 + f.h + 6);
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  for (const v of yt) ctx.fillText(fmtTick(v), f.x0 - 6, sy(f, v));
-
-  // region labels (only where they fit)
-  if (s.regionLabels && bands.length) {
-    ctx.font = `600 ${fs - 1}px ${th.sans}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    const label = (a: number, b: number, text: string, color: string) => {
-      if (b - a < ctx.measureText(text).width + 10) return;
-      ctx.fillStyle = color;
-      ctx.fillText(text, (a + b) / 2, f.y0 - 9);
-    };
-    const lo = sx(f, bands[0][0]);
-    const hi = sx(f, bands[bands.length - 1][1]);
-    label(f.x0, lo, s.regionLabels.beyond, th.extrapInk);
-    label(hi, f.x0 + f.w, s.regionLabels.beyond, th.extrapInk);
-    for (const [a, b] of bands) label(sx(f, a), sx(f, b), s.regionLabels.train, th.bandInk);
-    for (let i = 0; i + 1 < bands.length; i++)
-      label(sx(f, bands[i][1]), sx(f, bands[i + 1][0]), s.regionLabels.gap, th.interpInk);
-  }
-
-  if (s.handles) {
-    bands.forEach(([a, b], bi) => {
-      [a, b].forEach((x, side) => {
-        const px = sx(f, x);
-        const py = f.y0 + f.h - 18;
-        const active = s.activeEdge && s.activeEdge[0] === bi && s.activeEdge[1] === side;
-        ctx.fillStyle = active ? th.bandEdge : th.surface;
-        ctx.strokeStyle = th.bandEdge;
-        ctx.lineWidth = 1.3;
-        ctx.beginPath();
-        ctx.roundRect(px - 7, py - 13, 14, 26, 5);
-        ctx.fill();
-        ctx.stroke();
-        ctx.strokeStyle = active ? th.surface : th.bandEdge;
-        ctx.beginPath();
-        ctx.moveTo(px - 2, py - 6);
-        ctx.lineTo(px - 2, py + 6);
-        ctx.moveTo(px + 2, py - 6);
-        ctx.lineTo(px + 2, py + 6);
-        ctx.stroke();
-      });
-    });
-  }
-
-  if (s.tags?.left || s.tags?.right) {
-    ctx.font = `500 ${fs}px ${th.mono}`;
-    ctx.textBaseline = 'middle';
-    const tag = (text: string, x: number, right: boolean) => {
-      const w = ctx.measureText(text).width + 14;
-      const left = right ? x - w : x;
-      ctx.fillStyle = th.surface;
-      ctx.strokeStyle = th.lineStrong;
-      ctx.beginPath();
-      ctx.roundRect(left, f.y0 + 8, w, fs + 11, 5);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = th.ink;
-      ctx.textAlign = 'left';
-      ctx.fillText(text, left + 7, f.y0 + 8 + (fs + 11) / 2);
-    };
-    if (s.tags.left) tag(s.tags.left, f.x0 + 8, false);
-    if (s.tags.right) tag(s.tags.right, f.x0 + f.w - 8, true);
-  }
+  if (s.layers) {
+    s.layers.blit(ctx, 'over', s.width, s.height, over, [
+      th,
+      s.compact,
+      ...domains,
+      bandKey,
+      s.regionLabels?.train,
+      s.regionLabels?.gap,
+      s.regionLabels?.beyond,
+      s.handles,
+      s.activeEdge?.join(','),
+      s.tags?.left,
+      s.tags?.right,
+    ]);
+  } else over(ctx);
   ctx.restore();
   return f;
 }
@@ -515,6 +610,8 @@ export interface LossScene {
   compact?: boolean;
   /** Clear the canvas first (default true). */
   clear?: boolean;
+  /** On-screen plots: cache the axes (see PlotLayers). */
+  layers?: PlotLayers;
 }
 
 export function drawLoss(ctx: Ctx, s: LossScene, th: SceneTheme) {
@@ -545,55 +642,63 @@ export function drawLoss(ctx: Ctx, s: LossScene, th: SceneTheme) {
   const total = Math.max(1, s.epochs);
   const X = (e: number) => pad.l + (e / total) * w;
   const Y = (v: number) => pad.t + ((l1 - Math.log10(Math.max(v, 10 ** l0))) / (l1 - l0)) * h;
-  ctx.fillStyle = th.plotBg;
-  ctx.fillRect(pad.l, pad.t, w, h);
-  if (!s.compact) {
-    ctx.strokeStyle = th.grid;
-    ctx.lineWidth = 1;
-    ctx.fillStyle = th.faint;
-    ctx.font = `11px ${th.mono}`;
-    ctx.beginPath();
-    for (let k = l0; k <= l1; k++) {
-      const y = Math.round(Y(10 ** k)) + 0.5;
-      ctx.moveTo(pad.l, y);
-      ctx.lineTo(pad.l + w, y);
+  const axes = (ctx: Ctx) => {
+    ctx.fillStyle = th.plotBg;
+    ctx.fillRect(pad.l, pad.t, w, h);
+    if (!s.compact) {
+      ctx.strokeStyle = th.grid;
+      ctx.lineWidth = 1;
+      ctx.fillStyle = th.faint;
+      ctx.font = `11px ${th.mono}`;
+      ctx.beginPath();
+      for (let k = l0; k <= l1; k++) {
+        const y = Math.round(Y(10 ** k)) + 0.5;
+        ctx.moveTo(pad.l, y);
+        ctx.lineTo(pad.l + w, y);
+      }
+      const xt = niceTicks(0, total, 5);
+      for (const e of xt) {
+        const x = Math.round(X(e)) + 0.5;
+        ctx.moveTo(x, pad.t);
+        ctx.lineTo(x, pad.t + h);
+      }
+      ctx.stroke();
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      const step = Math.max(1, Math.ceil((l1 - l0) / 5));
+      for (let k = l0; k <= l1; k += step)
+        ctx.fillText(`1e${k}`.replace('-', '−'), pad.l - 6, Y(10 ** k));
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      for (const e of xt) ctx.fillText(fmtTick(e), X(e), pad.t + h + 6);
     }
-    const xt = niceTicks(0, total, 5);
-    for (const e of xt) {
-      const x = Math.round(X(e)) + 0.5;
-      ctx.moveTo(x, pad.t);
-      ctx.lineTo(x, pad.t + h);
-    }
-    ctx.stroke();
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    const step = Math.max(1, Math.ceil((l1 - l0) / 5));
-    for (let k = l0; k <= l1; k += step)
-      ctx.fillText(`1e${k}`.replace('-', '−'), pad.l - 6, Y(10 ** k));
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    for (const e of xt) ctx.fillText(fmtTick(e), X(e), pad.t + h + 6);
-  }
+  };
+  if (s.layers) s.layers.blit(ctx, 'axes', s.width, s.height, axes, [th, s.compact, l0, l1, total]);
+  else axes(ctx);
   ctx.save();
   ctx.beginPath();
   ctx.rect(pad.l, pad.t, w, h);
   ctx.clip();
-  // Draw at most ~2 points per pixel column.
+  // At most one point per ~1.5 px of the epoch axis. The stride follows the total epochs (not
+  // the epochs so far), so the sampled points stay put while the curve grows. Twelve curves at
+  // two points per pixel were most of a six-model race's raster cost.
+  const stride = Math.max(1, Math.floor(total / Math.max(1, w / 1.5)));
   const line = (arr: ArrayLike<number>) => {
     const n = arr.length;
-    const stride = Math.max(1, Math.floor(n / (w * 2)));
     ctx.beginPath();
     let pen = false;
-    for (let i = 0; i < n; i += stride) {
+    const point = (i: number) => {
       const v = arr[i];
       if (!(v > 0) || !Number.isFinite(v)) {
         pen = false;
-        continue;
+        return;
       }
       if (pen) ctx.lineTo(X(i + 1), Y(v));
       else ctx.moveTo(X(i + 1), Y(v));
       pen = true;
-    }
+    };
+    for (let i = 0; i < n; i += stride) point(i);
+    if (n > 1 && (n - 1) % stride) point(n - 1); // the curve reaches the newest epoch
     ctx.stroke();
   };
   for (const se of s.series) {

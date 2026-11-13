@@ -14,6 +14,7 @@
   import { decodeState } from '../../lib/share.ts';
   import Icon from '../Icon.svelte';
   import InsightCard from './InsightCard.svelte';
+  import ValuesTable from './ValuesTable.svelte';
   import Tex from '../Tex.svelte';
   import DataPanel from './DataPanel.svelte';
   import FitPlot from './FitPlot.svelte';
@@ -138,14 +139,22 @@
       .join(', '),
   );
   const failure = $derived(pg.runs.find((r) => r.status === 'error')?.errorMessage ?? '');
+  // Out of memory reads differently per browser (RangeError, allocation failed, out of memory).
+  const failureText = $derived(
+    /memory|alloc|RangeError/i.test(failure)
+      ? t('pg.status.memory')
+      : t('pg.status.error', { message: failure }),
+  );
   // Announced to screen readers on status changes (not every frame).
   const statusText = $derived(
-    t(`pg.status.${pg.status}`, {
-      epoch: pg.viewEpoch,
-      total: pg.epochs,
-      names: diverged,
-      message: failure,
-    }),
+    pg.status === 'error'
+      ? failureText
+      : t(`pg.status.${pg.status}`, {
+          epoch: pg.viewEpoch,
+          total: pg.epochs,
+          names: diverged,
+          message: failure,
+        }),
   );
   const slow = $derived(pg.clock === 0 && pg.status !== 'running' && pg.estimateTotal > 600);
   const backendChoices = ['auto', 'cpu', 'gpu'] as const;
@@ -336,7 +345,7 @@
         <Icon name="info" />{pg.pausedByHiddenTab
           ? t('pg.status.hidden')
           : failure
-            ? t('pg.status.error', { message: failure })
+            ? failureText
             : diverged
               ? t('pg.status.diverged', { names: diverged })
               : t('pg.run.slow', { time: formatDuration(pg.estimateTotal) })}
@@ -453,7 +462,8 @@
         </div>
       {/if}
       <Scrubber {pg} />
-      <p class="px-3.5 pb-3 text-xs text-muted">{t('pg.plot.hint')}</p>
+      <p class="px-3.5 text-xs text-muted">{t('pg.plot.hint')}</p>
+      <ValuesTable {pg} />
     </section>
 
     <InsightCard {pg} compact={mobile} />

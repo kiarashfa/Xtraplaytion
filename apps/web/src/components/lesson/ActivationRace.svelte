@@ -4,11 +4,12 @@
   import { compile, parse } from '@xtraplaytion/expr';
   import { onMount } from 'svelte';
   import { useTranslations, type MessageKey } from '../../i18n';
-  import { autoYDomain, drawFit, type SceneTheme } from '../../lib/scene/draw.ts';
+  import { autoYDomain, drawFit, PlotLayers, type SceneTheme } from '../../lib/scene/draw.ts';
   import { Trainer } from '../../lib/trainer.ts';
   import { url } from '../../lib/url.ts';
   import Icon from '../Icon.svelte';
   import { prepare, watchTheme } from '../playground/canvas.ts';
+  import { FramePaint } from '../playground/paint.svelte.ts';
   import Swatch from '../playground/Swatch.svelte';
 
   interface Props {
@@ -116,8 +117,11 @@
     };
   });
 
+  const layers = [new PlotLayers(), new PlotLayers(), new PlotLayers()];
+  const paint = new FramePaint();
+  $effect(() => () => paint.dispose());
   $effect(() => {
-    if (!theme) return;
+    if (!theme || !paint.ready()) return;
     canvases.forEach((c, i) => {
       if (!c) return;
       const { ctx, w, h } = prepare(c);
@@ -144,6 +148,7 @@
             right: `d = [1, ${hidden.join(', ')}, 1]`,
           },
           compact: true,
+          layers: layers[i],
         },
         theme,
       );

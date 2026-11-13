@@ -5,6 +5,7 @@
     autoYDomain,
     drawFit,
     fitLayout,
+    PlotLayers,
     invX,
     invY,
     sx,
@@ -14,6 +15,7 @@
   import type { Dataset } from '@xtraplaytion/engine';
   import { drawStroke, latticeFor, latticeOf } from '../../lib/source.ts';
   import { prepare, watchSize, watchTheme } from './canvas.ts';
+  import { FramePaint } from './paint.svelte.ts';
   import { COLOR_CLASS } from './Swatch.svelte';
 
   const {
@@ -75,6 +77,7 @@
     gridX: EMPTY,
     clean: EMPTY,
   };
+  const layers = new PlotLayers();
   function scene(w: number, h: number): FitScene | null {
     const d = pg.data ?? (drawing ? emptyData : null);
     if (!d) return null;
@@ -108,6 +111,7 @@
       activeEdge: drag?.edge ?? null,
       crosshairX: hoverX,
       compact,
+      layers,
       ...(tag ? { tags: { left: tag } } : {}),
     };
   }
@@ -122,9 +126,11 @@
     };
   });
 
+  const paint = new FramePaint();
+  $effect(() => () => paint.dispose());
   $effect(() => {
     void size;
-    if (!canvas || !theme) return;
+    if (!canvas || !theme || !paint.ready()) return;
     const { ctx, w, h } = prepare(canvas);
     const s = scene(w, h);
     if (ctx && s) drawFit(ctx, s, theme);

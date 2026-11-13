@@ -86,6 +86,13 @@
     <p class="font-mono text-[15px] font-semibold" data-epoch>
       <span class="sr-only">{t('pg.run.epoch')}</span>{nf.format(pg.viewEpoch)}
       <span class="font-normal text-faint">/ {nf.format(pg.epochs)}</span>
+      {#if pg.rounds}
+        <span
+          class="ms-1.5 font-sans text-xs font-medium text-muted"
+          title={t('pg.run.round.hint')}
+          data-round>{t('pg.run.round', { n: pg.rounds[0], total: pg.rounds[1] })}</span
+        >
+      {/if}
     </p>
     <div class="mt-1 h-1 overflow-hidden rounded bg-line" aria-hidden="true">
       <i

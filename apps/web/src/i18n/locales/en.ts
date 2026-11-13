@@ -4,6 +4,8 @@
  * ../format.ts. Copy rule: short, friendly, no jargon walls.
  */
 const en = {
+  'site.ogAlt':
+    'Xtraplaytion: neural networks and classical models fit a curve and guess beyond their data.',
   'site.description':
     'Train neural networks and classical models on a curve of your choice, live in your browser, and see how they interpolate, extrapolate and fail outside their data.',
 
@@ -17,9 +19,9 @@ const en = {
   'home.title': 'See how models learn a curve, and where they break.',
   'home.lead':
     'Xtraplaytion is a playground for training neural networks and classical models on a function you choose, right in your browser. Watch them fit the data, fill the gaps, and guess what lies beyond it.',
-  'home.status': 'Early version',
+  'home.status': 'Version 1',
   'home.statusDetail':
-    'The playground, four lessons and video export are open. More lessons are on the way.',
+    'Eight lessons, a gallery of races and video export, all running in your browser.',
   'home.privacy':
     'Everything runs on your device. No account is needed, and your experiments never leave your browser.',
   'home.featuresTitle': 'What you can do',
@@ -270,6 +272,9 @@ const en = {
   'pg.run.rateValue': '{n, number} epochs/s',
   'pg.run.left': 'Time left',
   'pg.run.estimate': 'Estimate',
+  'pg.run.round': 'Round {n} of {total}',
+  'pg.run.round.hint':
+    'This device trains a few networks at a time, so the race runs in rounds. Finished models replay alongside the next round.',
   'pg.run.slow':
     'This race may take about {time} on this device. Fewer epochs, points or neurons make it faster.',
   'pg.run.backend.cpu': 'CPU · exact',
@@ -389,7 +394,9 @@ const en = {
   'pg.status.paused': 'Paused at epoch {epoch} of {total}.',
   'pg.status.done': 'Finished {total} epochs.',
   'pg.status.diverged': '{names} diverged: the loss became infinite. Try a smaller learning rate.',
-  'pg.status.error': 'Something went wrong: {message}',
+  'pg.status.error': 'Training stopped with an error ({message}). Press Start over to try again.',
+  'pg.status.memory':
+    'This device ran out of memory. Try fewer neurons, points or models, then press Start over.',
   'pg.status.hidden': 'Paused while the tab was in the background.',
   'pg.share': 'Share',
   'pg.share.copied': 'Link copied',
@@ -500,6 +507,13 @@ const en = {
   'pg.replay.live': 'Live',
   'pg.replay.hint': 'Drag to rewind the race. Every model is shown at the same epoch.',
   'pg.plot.hint': 'Drag the dashed edges to move where the data lives.',
+  'pg.table.show': 'Show the curves as a table',
+  'pg.table.caption': 'Values at epoch {epoch, number}, at 21 evenly spaced points.',
+  'pg.table.region': 'Region',
+  'pg.table.truth': 'True value',
+  'pg.table.train': 'training data',
+  'pg.table.gap': 'gap',
+  'pg.table.beyond': 'beyond data',
   'pg.tooltip.truth': 'True value',
   'pg.loss': 'Loss',
   'pg.loss.legend': 'solid: training · dashed: validation · log scale',
@@ -570,6 +584,13 @@ const en = {
   'preset.classic-runge.name': 'Race: polynomial, spline, GP and net on Runge',
   'preset.overfit-poly.name': 'Race: polynomials on noisy data',
   'preset.overfit-net.name': 'Race: keep weights small on noisy data',
+  'preset.lr-sweep.name': 'Race: three learning rates',
+  'preset.optimizers.name': 'Race: SGD, momentum and Adam',
+  'preset.layout-crowded.name': 'Data: 200 points crowded in the middle',
+  'preset.layout-clusters.name': 'Data: 24 points in three clusters',
+  'preset.layout-spread.name': 'Data: 24 points spread out',
+  'preset.ensemble.name': 'Race: one network, five copies, a Gaussian process',
+  'preset.draw-challenge.name': 'Draw a curve: which model continues it?',
   'preset.waves.name': 'Three waves with a gap',
   'preset.xsinx.name': 'x · sin(x)',
   'preset.sine-gap.name': 'Fill the middle',
@@ -594,8 +615,6 @@ const en = {
   'lessons.minutes': '{n} min',
   'lessons.interactive': 'interactive',
   'lessons.lesson': 'Lesson {n}',
-  'lessons.soon':
-    'More lessons are on the way: reading loss curves, where to put your training data, and more.',
   'lessons.more': 'More lessons',
   'lessons.prev': 'Previous lesson',
   'lessons.next': 'Next lesson',
@@ -609,6 +628,30 @@ const en = {
   'predict.wrong': 'Not this time: {choice} does better here. Look at the middle of each plot.',
   'lrace.right': 'Well spotted: {choice} ends closest to the true function {where}.',
   'lrace.wrong': 'Not this time: {choice} ends closest to the true function {where}.',
+  'lrace.lr': 'learning rate {lr}',
+  'draw.question': 'Which model will continue your curve best beyond the shaded middle?',
+  'draw.start': 'Draw a curve across the whole plot, or pick an example.',
+  'draw.cover':
+    'Draw all the way across, from the left edge to the right edge: the ends are where the models are judged.',
+  'draw.winner': '{choice} continues your curve best beyond the data.',
+  'draw.right': 'Well spotted: {choice} continues your curve best beyond the data.',
+  'draw.wrong': 'Not this time: {choice} continues your curve best beyond the data.',
+  'draw.examples': 'Examples:',
+  'draw.example.v': 'A V shape',
+  'draw.example.s': 'An S-curve',
+  'draw.example.ramp': 'A ramp',
+  'draw.again': 'Draw again',
+  'draw.hint':
+    'Draw on the plot with the mouse, a finger or a pen. Strokes replace the part of the curve they cross.',
+  'draw.hint.race':
+    'The models only see points from the shaded middle. Beyond it, your drawing is the answer key.',
+  'drace.points': '{n, plural, one {# training point} other {# training points}}',
+  'drace.right': 'Well spotted: {choice} gives the best curve over the whole plot.',
+  'drace.wrong': 'Not this time: {choice} gives the best curve over the whole plot.',
+  'drace.layout': 'Training data',
+  'drace.trainPoints': 'Points',
+  'drace.inside': 'Error inside the data',
+  'drace.whole': 'Error over the whole plot',
   'lrace.where.inside': 'inside the data',
   'lrace.where.gap': 'in the gap',
   'lrace.where.beyond': 'beyond the data',

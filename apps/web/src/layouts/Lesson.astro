@@ -15,7 +15,12 @@ const prev = at > 0 ? LESSONS[at - 1] : null;
 const next = at >= 0 && at + 1 < LESSONS.length ? LESSONS[at + 1] : null;
 ---
 
-<Base title={fm.title} description={fm.description}>
+<Base
+  title={fm.title}
+  description={fm.description}
+  image={`og/lesson-${fm.n}.png`}
+  imageAlt={`${t('lessons.lesson', { n: fm.n })}: ${fm.title}`}
+>
   <article class="lesson mx-auto max-w-[720px] py-8 sm:py-12">
     <p class="flex flex-wrap items-center gap-2.5 text-[13px] font-medium text-muted">
       <a

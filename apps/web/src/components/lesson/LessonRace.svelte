@@ -3,7 +3,7 @@
   // otherwise trained live). Built on the playground state and plots.
   import { onMount } from 'svelte';
   import { useTranslations } from '../../i18n';
-  import { dimsLabel, modelName, Playground } from '../../lib/playground.svelte.ts';
+  import { dimsLabel, modelName, Playground, type NetSpec } from '../../lib/playground.svelte.ts';
   import { modelSummary } from '../../lib/describe.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import { url } from '../../lib/url.ts';
@@ -55,12 +55,18 @@
     });
     return best;
   });
-  // "N1 [1, 64, 64, 1]", plus whatever tells the models apart (penalty, degree...).
+  // "N1 [1, 64, 64, 1]", plus whatever tells the models apart (optimizer, learning rate,
+  // penalty, degree...).
   const name = (i: number) => {
     const m = pg.models[i];
     if (!m) return '';
     if (m.kind !== 'mlp') return `${modelName(m)} · ${modelSummary(m, t)}`;
-    return `${modelName(m)} ${dimsLabel(m)}${m.l2 ? ` · L2 ${m.l2.toExponential(0)}` : ''}`;
+    const nets = pg.models.filter((x): x is NetSpec => x.kind === 'mlp');
+    const parts = [`${modelName(m)} ${dimsLabel(m)}`];
+    if (nets.some((x) => x.optimizer !== m.optimizer)) parts.push(t(`opt.${m.optimizer}`));
+    if (nets.some((x) => x.lr !== m.lr)) parts.push(t('lrace.lr', { lr: String(m.lr) }));
+    if (m.l2) parts.push(`L2 ${m.l2.toExponential(0)}`);
+    return parts.join(' · ');
   };
   const nf = new Intl.NumberFormat('en');
 </script>

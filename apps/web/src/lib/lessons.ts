@@ -39,4 +39,33 @@ export const LESSONS: LessonInfo[] = [
       'Polynomials explode, Fourier series repeat, trees go flat. See how six models guess beyond the data.',
     minutes: 7,
   },
+  {
+    n: 5,
+    slug: 'loss-curves-and-the-learning-rate',
+    title: 'Loss curves and the learning rate',
+    summary: 'Too small, about right, too big. Read the story of training from its loss curve.',
+    minutes: 7,
+  },
+  {
+    n: 6,
+    slug: 'where-to-put-training-data',
+    title: 'Where to put your training data',
+    summary: 'Two hundred points in one place or two dozen spread out? Coverage beats quantity.',
+    minutes: 6,
+  },
+  {
+    n: 7,
+    slug: 'ensembles-and-uncertainty',
+    title: 'Ensembles and uncertainty',
+    summary:
+      'Five copies of one network agree where there is data. Watch where they stop agreeing.',
+    minutes: 7,
+  },
+  {
+    n: 8,
+    slug: 'draw-your-own-challenge',
+    title: 'Draw your own challenge',
+    summary: 'You draw the truth, the models see only the middle. Whose guess matches yours?',
+    minutes: 6,
+  },
 ];

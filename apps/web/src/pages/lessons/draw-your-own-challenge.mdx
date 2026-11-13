@@ -1,0 +1,50 @@
+---
+layout: ../../layouts/Lesson.astro
+title: Draw your own challenge
+description: You draw the truth across the whole plot. Three models see only the middle. Which one continues your curve best?
+n: 8
+minutes: 6
+---
+
+import DrawChallenge from '../../components/lesson/DrawChallenge.svelte';
+import { url as siteUrl } from '../../lib/url.ts';
+
+Every model has a built-in idea of what happens beyond its data. You have seen ReLU networks go straight, tanh networks level off and Gaussian processes drift back to the average. This time you decide what the truth is.
+
+## The challenge
+
+Draw any curve across the whole plot. The three models only get points from the shaded middle, between −2.5 and 2.5. Beyond that, your drawing is the answer key: the scoreboard measures how far each model's guess is from what you drew.
+
+- **N1** is a ReLU network, two layers of 32 neurons.
+- **N2** is the same network with tanh.
+- **G3** is a Gaussian process that tunes its own smoothness.
+
+No pointer at hand? The example buttons draw a curve for you.
+
+<DrawChallenge client:only="svelte" />
+
+## Three examples, three winners
+
+Each example suits one model:
+
+- **A V shape** goes to the ReLU network. Its curve is made of straight pieces, so beyond the data it carries on in a straight line, and so does a V.
+- **An S-curve** goes to the tanh network. Every tanh neuron levels off at both ends, so the network levels off too, just like the S.
+- **A ramp** goes to the Gaussian process. It tunes how far the influence of each point reaches, and for a smooth ramp it learns a long reach, so it continues the slope for a while.
+
+None of them is a better model in general. Each one simply assumes something about the world beyond the data, and wins when your drawing agrees.
+
+## Harder challenges
+
+- Draw a wave that keeps going. None of the three continues it: nothing in the middle says it should repeat.
+- Draw a curve that turns around just beyond the shaded edge. No model can see that coming.
+- Draw two different curves that agree in the middle. Every model gives the same answer for both, and at least one of the answers is wrong.
+
+That last one is the heart of this whole course. Data can only tell a model about the places it covers. Beyond them, a model is not measuring anymore: it is assuming.
+
+> Inside the data, models learn. Beyond it, they reveal what they assumed all along.
+
+## Try it yourself
+
+<a href={siteUrl('playground/')}>Open the playground</a> and choose Draw under Target to draw a
+curve for any race: add a polynomial, a spline or a tree, move the shaded ranges, and see whose
+assumptions match yours.

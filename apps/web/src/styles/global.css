@@ -22,7 +22,7 @@
   --xp-accent: #1d5fd6;
   --xp-accent-ink: #ffffff;
   --xp-accent-soft: #e9f0fd;
-  --xp-good: #0f7a55;
+  --xp-good: #0c6b4b;
   --xp-bad: #b4233d;
   --xp-focus: #1d5fd6;
   --xp-plot-bg: #ffffff;
@@ -283,5 +283,24 @@
     background: var(--xp-accent-soft);
     font-size: 16px;
     line-height: 1.55;
+  }
+  .lesson > table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 16px 0 20px;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  .lesson > table th,
+  .lesson > table td {
+    padding: 7px 14px 7px 0;
+    border-bottom: 1px solid var(--xp-line);
+    text-align: start;
+    vertical-align: top;
+  }
+  .lesson > table th {
+    font-weight: 600;
+    color: var(--xp-muted);
   }
 }

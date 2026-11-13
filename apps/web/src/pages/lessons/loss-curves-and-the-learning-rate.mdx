@@ -1,0 +1,71 @@
+---
+layout: ../../layouts/Lesson.astro
+title: Loss curves and the learning rate
+description: The loss curve is a diary of training. Learn to read it, then watch three learning rates and three optimizers race on the same data.
+n: 5
+minutes: 7
+---
+
+import LessonRace from '../../components/lesson/LessonRace.svelte';
+import { url as siteUrl } from '../../lib/url.ts';
+
+Every epoch, a network measures how far its curve is from the training points. That number is the **loss**: here, the average squared distance. The loss plot draws it for every epoch, so it tells the story of training at a glance. Its vertical axis is logarithmic: each grid line is ten times smaller than the one above, so steady progress looks like a straight slope down.
+
+## How big a step
+
+Training is a walk downhill. After each epoch the network works out which way to nudge every weight so the loss goes down, then takes a step in that direction. The **learning rate** sets the length of that step.
+
+Here are three identical tanh networks with two layers of 32 neurons, starting from the same weights, on 120 points of `sin(2x) + 0.5x`. Only the learning rate differs: 0.0001, 0.01 and 0.3.
+
+<LessonRace
+  client:only="svelte"
+  preset="lr-sweep"
+  question="Same network, same start. Which learning rate ends closest to the true curve?"
+  metric="inside"
+  speed={8}
+/>
+
+## Three shapes of loss curve
+
+- **Too small (0.0001): a long, gentle slope.** Every step goes the right way, but the steps are tiny. After 1,500 epochs the network is still far from the curve. It would get there, eventually.
+- **About right (0.01): a steep drop, then a slow glide.** The loss falls by a lot in the first few hundred epochs and keeps improving after that.
+- **Too big (0.3): a drop, then jumps.** The steps are so long that the network keeps overshooting the bottom of the valley and landing on the other side. The loss jumps up and down and stays high. With an even bigger rate it can blow up completely; the playground then marks the model as diverged.
+
+Scrub back to the first hundred epochs and compare the three fits with the loss curves. You can read a lot from the curve alone:
+
+| The loss curve                   | What it usually means                                   |
+| -------------------------------- | ------------------------------------------------------- |
+| Falls slowly and steadily        | The learning rate is small: raise it, or wait           |
+| Flat, then a sudden drop         | The network was stuck on a plateau and found a way down |
+| Jumps up and down                | The learning rate is too big                            |
+| Training falls, validation rises | Overfitting (see lesson 3)                              |
+
+## Three ways to take a step
+
+The learning rate is only half of the story. The **optimizer** decides how the step is taken. Now all three networks use the same learning rate of 0.01:
+
+- **SGD** (stochastic gradient descent) takes the plain step: straight downhill, length set by the learning rate.
+- **SGD with momentum** keeps a running direction, like a ball that rolls on and builds up speed along a long valley.
+- **Adam** gives every weight its own step size, based on how large that weight's recent gradients were. Weights with small gradients take relatively bigger steps.
+
+<LessonRace
+  client:only="svelte"
+  preset="optimizers"
+  question="Same learning rate of 0.01. Which optimizer ends closest to the true curve?"
+  metric="inside"
+  speed={8}
+/>
+
+## What the race shows
+
+Plain SGD is the slowest by far: at this learning rate it is still working on the overall shape when the race ends. Momentum gets much further with the same step length. Adam gets to a good fit first. Its loss curve has small bumps along the way, which is normal for Adam and nothing to worry about.
+
+No optimizer wins everywhere, and each has a learning rate where it does best. Adam is a good default, and it is the playground's default too.
+
+> The loss curve shows how training went. The fit plot shows what it learned. Read both.
+
+## Try it yourself
+
+<a href={siteUrl('playground/#preset=lr-sweep')}>Open the learning rate race in the playground</a>.
+Each network's learning rate is in its settings. Try 0.001: it gets there too, just later. Then give
+plain SGD a bigger learning rate and see how close it comes to Adam.

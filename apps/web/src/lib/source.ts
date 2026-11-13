@@ -169,7 +169,8 @@ function cellNumber(s: string, decimalComma: boolean): number {
   let t = s.trim().replace(/^"|"$/g, '').replace('−', '-');
   if (decimalComma) t = t.replace(',', '.');
   if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(t)) return NaN;
-  return Number(t);
+  const v = Number(t);
+  return Number.isFinite(v) ? v : NaN; // 1e400 overflows to Infinity: not a usable number
 }
 
 /** Parses CSV, TSV or whitespace-separated text. Sniffs the delimiter, detects a header row,

@@ -102,7 +102,7 @@
     <ImportPanel {pg} />
   {:else}
     <ul class="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto pe-1">
-      {#each PRESETS as p (p.id)}
+      {#each PRESETS.filter((x) => !x.unlisted) as p (p.id)}
         <li>
           <button
             type="button"

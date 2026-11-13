@@ -3,6 +3,7 @@
   // values `draw` reads change.
   import type { Ctx, SceneTheme } from '../../lib/scene/draw.ts';
   import { prepare, watchSize, watchTheme } from './canvas.ts';
+  import { FramePaint } from './paint.svelte.ts';
 
   const {
     draw,
@@ -22,9 +23,11 @@
     };
   });
 
+  const paint = new FramePaint();
+  $effect(() => () => paint.dispose());
   $effect(() => {
     void size;
-    if (!canvas || !theme) return;
+    if (!canvas || !theme || !paint.ready()) return;
     const { ctx, w, h } = prepare(canvas);
     if (ctx && w > 0 && h > 0) draw(ctx, w, h, theme);
   });

@@ -37,6 +37,24 @@ export const GALLERY: GalleryItem[] = [
     lesson: 'noise-overfitting-and-regularization',
   },
   {
+    id: 'lr-sweep',
+    title: 'Too small, about right, too big',
+    text: 'One network, three learning rates. The smallest crawls, the biggest jumps around, the middle one fits.',
+    lesson: 'loss-curves-and-the-learning-rate',
+  },
+  {
+    id: 'layout-crowded',
+    title: 'Two hundred points in one place',
+    text: 'A perfect fit where the data is crowded, and a guess everywhere else. Where the points sit matters more than how many.',
+    lesson: 'where-to-put-training-data',
+  },
+  {
+    id: 'ensemble',
+    title: 'Five copies disagree',
+    text: 'Five copies of one network agree on the data and spread out in the gap. Their spread is a rough measure of doubt.',
+    lesson: 'ensembles-and-uncertainty',
+  },
+  {
     id: 'overfit-poly',
     title: 'Polynomials on noisy data',
     text: 'Degree 3 is too stiff and degree 15 chases the noise. Degree 7 finds the wave.',

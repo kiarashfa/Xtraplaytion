@@ -1,0 +1,51 @@
+---
+layout: ../../layouts/Lesson.astro
+title: Where to put your training data
+description: More data helps, but where it sits helps more. The same network learns the same function from three different layouts of points.
+n: 6
+minutes: 6
+---
+
+import DataRace from '../../components/lesson/DataRace.svelte';
+import { url as siteUrl } from '../../lib/url.ts';
+
+Collecting data costs time and money, so it is worth asking where each point does the most good. A model learns the shape of a function only where it has seen it. Between the points it interpolates, beyond them it extrapolates, and both are guesses.
+
+## Three layouts
+
+The function is `sin(1.5x) + 0.3x` on the plot from −6 to 6, with a little noise. The same tanh network (two layers of 32 neurons, same starting weights) trains three times, each time on different points:
+
+- **200 points crowded in the middle**, all between −2 and 2.
+- **24 points in three small clusters**: one at each end and one in the middle.
+- **24 points spread evenly** over the whole plot.
+
+In each case a fifth of the points is held back for validation, so the network trains on the rest.
+
+<DataRace
+  client:only="svelte"
+  presets={['layout-crowded', 'layout-clusters', 'layout-spread']}
+  labels={['200 in the middle', '24 in three clusters', '24 spread out']}
+  question="Same network, same function. Which data gives the best curve over the whole plot?"
+  speed={8}
+/>
+
+## Coverage beats quantity
+
+- **200 in the middle** gives a near perfect fit where the points are: look at its small error inside the data. Outside that range the network has never seen the function, and its guess drifts away. Over the whole plot it does worst, with eight times more points than the others.
+- **24 in three clusters** fits each cluster well, but the two wide gaps between them are guesses, and the network fills them with smooth curves that miss the wave.
+- **24 spread out** has only a few points per wave, so its error inside the data is higher. But no part of the plot is unseen, and over the whole plot it does best by far.
+
+The extra points in the crowded layout were almost wasted: once a region is covered, more points there add little. A new point helps most where the model has seen nothing yet.
+
+## Where to add the next point
+
+If you can only measure a few more points, put them in the biggest gap, and at the edges of the range you care about. The next lesson shows a way to find those places automatically: train several models and look where they disagree.
+
+Two cautions. With noisy data, a region needs several points, not one, or the model will learn the noise. And no layout can help beyond the range you sampled: the right edge of the plot is still the end of what any of these networks knows.
+
+## Try it yourself
+
+<a href={siteUrl('playground/#preset=layout-crowded')}>Open the crowded layout in the playground</a>
+. Drag the edges of the shaded range outwards and watch the error beyond the data fall. Then add a
+second range with Add range and find the smallest number of points that still gives a good curve
+everywhere.

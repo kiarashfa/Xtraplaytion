@@ -1,0 +1,55 @@
+---
+layout: ../../layouts/Lesson.astro
+title: Ensembles and uncertainty
+description: One network gives one curve and no sign of how sure it is. Train five copies and look where they disagree, then compare with a Gaussian process.
+n: 7
+minutes: 7
+---
+
+import LessonRace from '../../components/lesson/LessonRace.svelte';
+import { url as siteUrl } from '../../lib/url.ts';
+
+A trained network draws one curve. It looks just as confident in the middle of the data as far beyond it, where it is only guessing. Wouldn't it be useful if a model could also say how sure it is?
+
+## Five copies of one network
+
+Train the same network several times, each time from different random starting weights. Where the data pins the curve down, the copies end up in almost the same place. Where there is no data, nothing holds them together, and each copy makes its own guess. The spread between the copies is a rough measure of uncertainty. A group of models used together like this is called an **ensemble**.
+
+The race: 60 noisy points of `sin(x) + 0.3x`, with a gap in the middle and no data near the edges.
+
+- **N1** is one ReLU network with two layers of 64 neurons.
+- **N2** is the average of five copies of the same network. Its first copy is N1 itself; the other four start from different weights. The shaded band is the spread of the five (two standard deviations either way).
+- **G3** is a Gaussian process, a classical model that comes with its own band (see lesson 4).
+
+<LessonRace
+  client:only="svelte"
+  preset="ensemble"
+  question="Inside the data, which model ends closest to the true curve?"
+  metric="inside"
+  speed={8}
+/>
+
+## The average helps
+
+The noise pushes every training point up or down a little, and each copy learns some of that noise in its own way. Averaging cancels part of it, so the average of the five usually ends closer to the truth than N1 alone. That is no accident: the squared error of an average is never larger than the average squared error of the copies.
+
+The Gaussian process does even better inside the data here. It assumes the function is smooth and smooths over the noise, which suits these points well.
+
+## The band shows where the guessing is
+
+Now look at the shaded bands. N2's band is narrow where the points are and opens up in the gap and beyond the data: the copies agree where there is data and disagree where there is none. The Gaussian process's band does the same, by design: the further from the data, the wider it gets.
+
+So the band answers a useful question: where should I not trust this model? It also tells you where a new data point would help most (lesson 6).
+
+## A hint, not a guarantee
+
+A narrow band does not mean the curve is right. The five copies share the same design and the same data, so they can share the same blind spot and agree on a wrong answer. The Gaussian process's band rests on its own assumption about how smooth the function is. Beyond the data, both bands sometimes miss the true curve completely. Try a few different noise samples in the playground and you will see it happen.
+
+> Agreement between models is evidence, not proof. Far from the data, every band is still a guess about the guess.
+
+## Try it yourself
+
+<a href={siteUrl('playground/#preset=ensemble')}>Open the race in the playground</a>. In a network's
+settings, Average of copies turns any network into an ensemble. Press New noise a few times and
+watch where the bands cover the true curve and where they miss it. Try tanh copies as well: they
+disagree in a different way.

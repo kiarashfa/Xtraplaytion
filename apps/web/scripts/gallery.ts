@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createRun } from '@xtraplaytion/engine';
 import { datasetOf, presetState, trainingIdentity } from '../src/lib/experiment.ts';
 import { GALLERY } from '../src/lib/gallery.ts';
+import { bootstrapData, copySeed } from '../src/lib/models.ts';
 import { PRESETS } from '../src/lib/presets.ts';
 import { decompressRecording } from '../src/lib/recording.ts';
 import { packValues, type ThumbFile, type ThumbModel } from '../src/lib/thumbs.ts';
@@ -51,16 +52,46 @@ for (const item of GALLERY) {
     }
   } else {
     for (const m of state.models) {
-      const run = createRun(m.model, data, m.seed, state.epochs);
-      run.step(state.epochs);
-      const f = run.frame();
-      run.dispose();
-      const g = packValues(f.grid);
+      // Averaged models: k copies (networks from other starting weights, classical models on
+      // bootstrap resamples), mean as the line and their spread as the band, as on the page.
+      const k = m.copies ?? 1;
+      const grids: Float32Array[] = [];
+      let band: Float32Array | undefined;
+      for (let i = 0; i < k; i++) {
+        const net = m.model.kind === 'mlp';
+        const run = createRun(
+          m.model,
+          k > 1 && !net ? bootstrapData(data, m.seed + i) : data,
+          k > 1 && net ? copySeed(m.seed, i) : m.seed,
+          state.epochs,
+        );
+        run.step(state.epochs);
+        const f = run.frame();
+        run.dispose();
+        grids.push(f.grid);
+        if (k === 1 && f.band) band = f.band;
+      }
+      let grid = grids[0];
+      if (k > 1) {
+        grid = new Float32Array(grid.length);
+        band = new Float32Array(grid.length);
+        for (let j = 0; j < grid.length; j++) {
+          let s = 0;
+          let s2 = 0;
+          for (const g of grids) {
+            s += g[j];
+            s2 += g[j] * g[j];
+          }
+          grid[j] = s / k;
+          band[j] = Math.sqrt(Math.max(0, s2 / k - (s / k) ** 2));
+        }
+      }
+      const g = packValues(grid);
       models.push({
         lo: g.lo,
         hi: g.hi,
         grid: g.data,
-        ...(f.band ? { band: packValues(f.band) } : {}),
+        ...(band ? { band: packValues(band) } : {}),
       });
     }
   }

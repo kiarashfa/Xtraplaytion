@@ -642,6 +642,17 @@ export class Playground {
     return this.runs.reduce((m, r) => Math.max(m, r.latest), 0);
   });
   viewEpoch = $derived(this.replayEpoch ?? this.held ?? this.clock);
+  /** [current, total] when the race runs in rounds (more networks than free workers): the
+   *  clock starts over with each round and finished models replay alongside. Null otherwise. */
+  rounds = $derived.by((): [number, number] | null => {
+    if (this.mode !== 'live') return null;
+    const queued = this.runs.filter((r) => r.status === 'queued');
+    const started = this.runs.filter((r) => r.status !== 'queued');
+    const current = 1 + started.reduce((m, r) => Math.max(m, r.wave), 0);
+    const need = queued.reduce((n, r) => n + this.workersOf(r), 0);
+    const total = current + Math.ceil(need / this.maxWorkers);
+    return total > 1 ? [current, total] : null;
+  });
   /** Runs of the models currently shown, in list order (visibility never restarts a run). */
   visibleRuns = $derived.by(() => {
     const shown = this.models.filter((m) => m.visible).map((m) => m.id);

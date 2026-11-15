@@ -10,6 +10,7 @@ const PAGES = [
   ...LESSONS.map((l) => `lessons/${l.slug}/`),
   'gallery/',
   'library/',
+  'user/',
   'about/',
 ];
 

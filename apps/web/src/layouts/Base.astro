@@ -4,6 +4,7 @@ import ConsentBar from '../components/ConsentBar.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import Icon from '../components/Icon.svelte';
 import ThemeToggle from '../components/ThemeToggle.svelte';
+import ProfileMenu from '../components/account/ProfileMenu.astro';
 import { localeInfo, useTranslations } from '../i18n';
 import { THEME_INIT_SCRIPT, THEME_KEY } from '../lib/theme.ts';
 import { url } from '../lib/url.ts';
@@ -105,6 +106,7 @@ const imageUrl = new URL(url(image), Astro.site);
           dark: t('theme.dark'),
         }}
       />
+      <ProfileMenu />
       {/* Phones and narrow windows: the links fold into a menu (works without JavaScript). */}
       <details class="relative md:hidden" data-nav-menu>
         <summary

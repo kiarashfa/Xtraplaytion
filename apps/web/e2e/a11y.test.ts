@@ -18,6 +18,7 @@ const PAGES = [
   ...LESSONS.map((l) => `./lessons/${l.slug}/`),
   './gallery/',
   './library/',
+  './user/',
   './about/',
   './embed/#preset=race-activations',
   './no-such-page/',
@@ -116,6 +117,30 @@ describe.each(targets)('$name', (target) => {
     await page.getByRole('button', { name: 'Export' }).click();
     await page.getByRole('dialog').waitFor();
     await check('export dialog');
+    expect([...new Set(found)]).toEqual([]);
+    await context.close();
+  });
+
+  test('profile page, dialog and header menu pass axe', async () => {
+    const { context, page } = await openPage(browser, target, baseURL);
+    await page.goto('./user/', { waitUntil: 'networkidle' });
+    await hydrated(page);
+    const found: string[] = [];
+    const check = async (step: string) =>
+      found.push(...(await audit(page, true)).map((v) => `${step}: ${v}`));
+    await page.locator('[data-user-start]').click();
+    await page.getByRole('dialog').waitFor();
+    await check('profile dialog');
+    await page.locator('[data-profile-kind=photo]').check({ force: true });
+    await check('profile dialog photo');
+    await page.locator('[data-profile-kind=initials]').check({ force: true });
+    await page.locator('[data-profile-name-input]').fill('Ada Lovelace');
+    await page.locator('[data-profile-save]').click();
+    await page.locator('[data-user-profile]').waitFor();
+    await check('profile');
+    await page.locator('[data-profile-trigger]').click();
+    await page.locator('[data-profile-menu]').waitFor();
+    await check('header menu');
     expect([...new Set(found)]).toEqual([]);
     await context.close();
   });

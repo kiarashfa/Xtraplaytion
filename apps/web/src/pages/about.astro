@@ -37,17 +37,29 @@ const t = useTranslations();
     </ul>
 
     <h2 id="privacy">Privacy</h2>
+    <p>
+      Xtraplaytion has no server, no database and no accounts. It is free, with no ads and no
+      subscription.
+    </p>
     <ul>
-      <li>Free, with no ads, no subscription and no account.</li>
       <li>
         Your experiments stay in your browser. A share link keeps the whole experiment after the #
         sign of the address, the part that browsers never send to a server. The library keeps your
         saves in this browser only.
       </li>
       <li>
+        Your profile (a name and a picture, both optional) is kept in this browser and inside your
+        save file. A photo you pick is cut to a small square on your device and is never uploaded,
+        except to your own cloud save if you turn it on.
+      </li>
+      <li>
+        The save file holds your profile and your saved experiments. It is how you sign in on
+        another device: download it, then open it there, or keep it in your cloud.
+      </li>
+      <li>
         One cookie, and only if you agree: if you accept in the cookie bar, Google Analytics counts
-        visits. It gets the address of the page without the part after the # sign, and nothing you
-        made. If you decline, nothing from Google loads at all.
+        visits. It gets the address of the page without the part after the # sign or the ? sign, and
+        nothing you made, nor your name or picture. If you decline, it does not load at all.
       </li>
       <li>Races embedded in other sites never load analytics.</li>
     </ul>
@@ -58,6 +70,50 @@ const t = useTranslations();
         </button>
       </p>
     )}
+
+    <h3 id="cloud-save">Cloud save</h3>
+    <p>
+      Cloud save is off unless you turn it on in <a href={url('user/')}>your profile</a>. When you
+      connect Google Drive or Dropbox, your browser writes your save file straight to your own
+      account and reads it back from there, so your profile and experiments follow you to your other
+      devices. Nothing passes through a server of ours.
+    </p>
+    <ul>
+      <li>
+        <strong>Google Drive:</strong> Xtraplaytion asks only for its own hidden app folder in your
+        Drive (the permission called drive.appdata). It cannot see, open or change any other file in
+        your Drive. It also reads the name and email address of your Google account, only to show
+        which account is connected.
+      </li>
+      <li>
+        <strong>Dropbox:</strong> Xtraplaytion uses its own app folder, Apps/Xtraplaytion, and reads
+        the name and email address of your Dropbox account to show which account is connected.
+      </li>
+      <li>
+        The keys that Google or Dropbox hand out for this, and the account name and email, are kept
+        in this browser only. Google's sign-in script loads only when you connect or save to Google
+        Drive.
+      </li>
+      <li>
+        You can disconnect or sign out at any time, which also withdraws the access. Your save file
+        stays in your cloud until you delete it: in Google Drive under Settings, Manage apps,
+        Xtraplaytion, Delete hidden app data; in Dropbox in the Apps/Xtraplaytion folder. You can
+        also remove the access from your Google Account (Security, third-party connections) or in
+        Dropbox (Settings, Connected apps).
+      </li>
+      <li>
+        Data from your cloud is used only to keep your save. It is never sold, shared, used for ads
+        or used to train AI models, and nobody but you can read it.
+      </li>
+    </ul>
+    <p>
+      Xtraplaytion's use and transfer of information received from Google APIs adheres to the{' '}
+      <a href="https://developers.google.com/terms/api-services-user-data-policy">
+        Google API Services User Data Policy
+      </a>
+      , including the Limited Use requirements. Questions about privacy are welcome on the project's{' '}
+      <a href={`${SITE.repoUrl}/issues`}>GitHub issues</a> page.
+    </p>
 
     <h2>What you make is yours</h2>
     <p>

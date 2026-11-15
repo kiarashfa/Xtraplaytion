@@ -21,9 +21,9 @@ const en = {
     'Xtraplaytion is a playground for training neural networks and classical models on a function you choose, right in your browser. Watch them fit the data, fill the gaps, and guess what lies beyond it.',
   'home.status': 'Version 1',
   'home.statusDetail':
-    'Eight lessons, a gallery of races and video export, all running in your browser.',
+    'Eight lessons, a gallery of races, video export and cloud save, all running in your browser.',
   'home.privacy':
-    'Everything runs on your device. No account is needed, and your experiments never leave your browser.',
+    'Everything runs on your device. No account is needed, and your experiments stay in your browser unless you turn on cloud save.',
   'home.featuresTitle': 'What you can do',
   'home.feature.target':
     'Pick a target: type a formula, choose a preset, draw a curve or paste data.',
@@ -32,7 +32,7 @@ const en = {
   'home.feature.race':
     'Race up to six models: neural networks with your own layers and activations, polynomials, splines, trees and Gaussian processes.',
   'home.feature.save':
-    'Save experiments in your browser, share them as links or files, or copy them as Python code.',
+    'Save experiments in your browser or your own Google Drive or Dropbox, share them as links or files, or copy them as Python code.',
   'home.feature.export': 'Export the animation as a video ready for social media.',
 
   'figure.label':
@@ -360,7 +360,8 @@ const en = {
   'lib.cancel': 'Cancel',
   'lib.confirmDelete': 'Delete “{name}”? This cannot be undone.',
   'lib.local':
-    'Saved experiments live only in this browser: clearing its site data removes them. Download files to keep copies.',
+    'Saved experiments live in this browser: clearing its site data removes them. To keep them safe or open them on another device, turn on cloud save or download your save file in your profile.',
+  'lib.toProfile': 'Your profile',
   'lib.usage': 'This site uses {used} of browser storage.',
   'lib.error.unavailable':
     'This browser does not allow saving here (private windows often block it).',
@@ -735,6 +736,174 @@ const en = {
   'embed.code.copied': 'Embed code copied',
   'embed.code.failed': 'Could not copy. Select the code and copy it.',
   'embed.code.preview': 'Preview',
+  'nav.profile': 'Profile',
+  'me.menu': 'Your profile',
+  'me.menuNamed': 'Your profile: {name}',
+  'me.noProfile': 'No profile in this browser yet',
+  'me.count':
+    '{count, plural, =0 {Nothing saved in this browser yet} one {# experiment in this browser} other {# experiments in this browser}}',
+  'me.open': 'Your profile',
+  'me.setUp': 'Set up a profile or open your save',
+  'me.library': 'Your library',
+  'me.download': 'Download save file',
+  'me.signOut': 'Sign out of this browser',
+  'me.signOutConfirm':
+    '{count, plural, one {Your experiment is kept only in this browser. Download the save file first to keep it.} other {Your # experiments are kept only in this browser. Download the save file first to keep them.}}',
+  'me.signOutAnyway': 'Sign out',
+  'me.signingOut': 'Signing out…',
+  'me.signedOut': 'Signed out of this browser.',
+  'me.signOutFailed': 'Signing out did not work. Try again.',
+  'me.signOutCloud':
+    'Could not save to {where} first, so nothing was removed. Open your profile to try again.',
+  'user.signOutCloud': 'Could not save to {where} first, so nothing was removed. {reason}',
+  'me.sync.saving': 'Saving to {where}…',
+  'me.sync.saved': 'Saved to {where}',
+  'me.sync.savedAgo': 'Saved to {where} · {ago}',
+  'me.sync.pending': 'Changes waiting to save to {where}',
+  'me.sync.auth': '{where} needs you to sign in again',
+
+  'user.title': 'Your profile',
+  'user.description':
+    'Your name, picture and saved experiments. Keep them in your own cloud or as a file, and open them on any device.',
+  'user.loading': 'Opening your profile…',
+  'user.blocked':
+    'This browser blocks site storage, so nothing can be kept here. Allow site data for this site, or use another browser.',
+  'user.storageError': 'This browser blocks site storage, so that could not be kept.',
+  'user.welcome.lead':
+    'No accounts and no passwords. Your experiments live in this browser. Give them a name and a face, or bring your save from another device.',
+  'user.welcome.start': 'Set up your profile',
+  'user.welcome.or': 'or open your save',
+  'user.welcome.hint':
+    'Your save is your key. Open it from your cloud or from a file, and it joins whatever is already in this browser.',
+  'user.openFile': 'Open a save file…',
+  'user.edit': 'Edit profile',
+  'user.editPicture': 'Change your picture',
+  'user.addName': 'Add your name',
+  'user.stat.experiments': 'Experiments',
+  'user.stat.models': 'Models trained',
+  'user.stat.epochs': 'Epochs',
+  'user.stat.since': 'Since',
+  'user.recent.title': 'Recent experiments',
+  'user.recent.all': 'Open your library',
+  'user.recent.empty':
+    'Nothing saved yet. In the playground, press Save to keep an experiment here.',
+  'user.recent.toPlayground': 'Go to the playground',
+  'user.file.title': 'Save file',
+  'user.file.body':
+    'Your profile and every saved experiment, with results, in one file. Open it on another device to bring everything there.',
+  'user.file.download': 'Download',
+  'user.file.open': 'Open…',
+  'user.browser.title': 'This browser',
+  'user.browser.body':
+    'On a shared computer, sign out to remove your profile and experiments from this browser.',
+  'user.browser.bodyCloud':
+    'Signing out saves to {where} first, then removes your profile and experiments from this browser.',
+  'user.cancel': 'Cancel',
+  'user.merge.added': '{count, plural, one {# new experiment} other {# new experiments}}',
+  'user.merge.updated': '{count, plural, one {# updated} other {# updated}}',
+  'user.merge.removed': '{count, plural, one {# deleted} other {# deleted}}',
+  'user.merge.profile': 'your profile',
+  'user.merge.done': 'Opened {file}: {what}.',
+  'user.merge.nothing': 'Everything in {file} was already here.',
+  'user.merge.skipped':
+    '{count, plural, one {# damaged experiment was left out.} other {# damaged experiments were left out.}}',
+  'user.file.error.tooBig': 'That save file is too large.',
+  'user.file.error.notJson': 'That file could not be read as a save file.',
+  'user.file.error.notSave': 'That file is not an Xtraplaytion save file.',
+  'user.file.error.experiment':
+    'That is a single experiment, not a save file. Add it in your library instead.',
+  'user.file.error.newer':
+    'That save file comes from a newer version of Xtraplaytion. Reload the page and try again.',
+  'user.file.error.invalid': 'That save file is damaged.',
+
+  'pic.titleNew': 'Set up your profile',
+  'pic.title': 'Edit profile',
+  'pic.name': 'Name',
+  'pic.namePlaceholder': 'Your name',
+  'pic.nameHint': 'Shown only to you, in this browser and in your save.',
+  'pic.picture': 'Picture',
+  'pic.initials': 'Initials',
+  'pic.photo': 'Photo',
+  'pic.letters': 'Letters',
+  'pic.lettersHint': 'Up to 3 letters. Leave empty to use your name.',
+  'pic.color': 'Color',
+  'pic.tint.blue': 'Blue',
+  'pic.tint.teal': 'Teal',
+  'pic.tint.green': 'Green',
+  'pic.tint.amber': 'Amber',
+  'pic.tint.rose': 'Rose',
+  'pic.tint.plum': 'Plum',
+  'pic.tint.violet': 'Violet',
+  'pic.tint.slate': 'Slate',
+  'pic.choose': 'Choose a photo…',
+  'pic.another': 'Choose another photo…',
+  'pic.drop': 'or drop one here',
+  'pic.zoom': 'Zoom',
+  'pic.cropHelp': 'Drag to place it. Zoom with the slider or the mouse wheel.',
+  'pic.cropLabel': 'Photo crop. Arrow keys move the photo, plus and minus zoom.',
+  'pic.size': 'Kept as a small {kb} KB image in your save.',
+  'pic.notImage': 'That is not an image this browser can open.',
+  'pic.remove': 'Remove photo',
+  'pic.save': 'Save',
+  'pic.cancel': 'Cancel',
+  'pic.preview': 'Preview',
+
+  'cloud.title': 'Cloud save',
+  'cloud.unavailable':
+    'Cloud save is not available in this copy of Xtraplaytion. The save file works everywhere.',
+  'cloud.connect': 'Connect',
+  'cloud.connecting': 'Connecting…',
+  'cloud.connectedAs': 'Connected as {email}',
+  'cloud.connected': 'Connected',
+  'cloud.notConnected': 'Not connected',
+  'cloud.home.google': 'A hidden app folder in your Drive. Xtraplaytion sees only its own file.',
+  'cloud.home.dropbox': 'Its own folder in your Dropbox, Apps/Xtraplaytion.',
+  'cloud.status.saving': 'Saving to {where}…',
+  'cloud.status.auth': '{where} needs you to sign in again.',
+  'cloud.status.pending': 'Changes waiting to be saved.',
+  'cloud.status.saved': 'Saved to {where} · {ago}',
+  'cloud.status.connected': 'Connected to {where}.',
+  'cloud.saveNow': 'Save now',
+  'cloud.signInAgain': 'Sign in again',
+  'cloud.disconnect': 'Disconnect',
+  'cloud.auto': 'Saves by itself a few seconds after each change.',
+  'cloud.autoGoogle':
+    'Saves by itself a few seconds after each change. After an hour, Google asks for one click to keep going.',
+  'cloud.pitch':
+    'Keep your save in your own Google Drive or Dropbox. It updates by itself and follows you to other devices.',
+  'cloud.privacy': 'How cloud save handles your data',
+  'cloud.result.saved': 'Saved to {where}.',
+  'cloud.result.brought': 'Brought in {what} from {where}.',
+  'cloud.result.disconnected':
+    'Disconnected from {where}. Your save there stays until you delete it.',
+  'cloud.opening': 'Opening Dropbox…',
+  'cloud.finishing': 'Connecting Dropbox…',
+  'cloud.error.gisLoad':
+    'Google sign-in could not load. Check the connection (or a blocker) and try again.',
+  'cloud.error.gisStart': 'Google sign-in did not start. Reload the page and try again.',
+  'cloud.error.googleUnfinished': 'Google sign-in did not finish.',
+  'cloud.error.googleScope':
+    'Google Drive access was not allowed, so nothing can be saved there. Connect again and tick the box that lets Xtraplaytion use its own folder in your Drive.',
+  'cloud.error.popupClosed': 'The Google window closed before it finished.',
+  'cloud.error.popupBlocked':
+    'The Google sign-in window could not open. Allow pop-ups for this site and try again.',
+  'cloud.error.googleAgain': 'Google needs you to sign in again.',
+  'cloud.error.googleClick': 'Google needs a click to save again.',
+  'cloud.error.dropboxAgain': 'Dropbox needs you to connect again.',
+  'cloud.error.http': '{where} answered with an error ({status}). Try again later.',
+  'cloud.error.offline':
+    'No connection to {where}. Your changes stay here and are saved when you are back online.',
+  'cloud.error.conflict': 'Another device saved at the same moment. Try again.',
+  'cloud.error.storage': 'This browser blocks site storage, so Dropbox cannot be connected here.',
+  'cloud.error.denied': 'Dropbox access was not allowed, so nothing was connected.',
+  'cloud.error.dropboxUnfinished': 'Dropbox did not finish connecting.',
+  'cloud.error.foreign':
+    'That Dropbox answer does not belong to this browser. Connect again from here.',
+  'cloud.error.unreadable':
+    'The save in your {where} is damaged. Remove {file} there to start a new one.',
+  'cloud.error.tooBig':
+    'Your save is too large for the cloud ({size}). Delete some saved experiments and try again.',
+  'cloud.error.failed': 'Saving to the cloud failed. Try again.',
 } as const;
 
 export type MessageKey = keyof typeof en;

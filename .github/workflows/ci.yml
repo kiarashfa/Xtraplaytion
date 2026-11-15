@@ -33,8 +33,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Lint, format, typecheck, unit tests, build, third-party notices.
+      # Lint, format, typecheck, unit tests, build, third-party notices. The cloud save ids are
+      # public by design (an OAuth client id and a Dropbox app key); without them the site simply
+      # offers no cloud save.
       - run: pnpm check
+        env:
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
 
       # Google Chrome ships with the runner; Firefox and WebKit are installed for CI only.
       - name: Install Firefox and WebKit

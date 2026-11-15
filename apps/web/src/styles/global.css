@@ -304,3 +304,98 @@
     color: var(--xp-muted);
   }
 }
+
+/* Profile circle (header, menu, profile page). Kinds: '' person icon, 'letters', 'picture'. */
+@layer components {
+  .xp-avatar {
+    --xp-av: 36px;
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: var(--xp-av);
+    height: var(--xp-av);
+    flex: none;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--xp-surface-2);
+    color: var(--xp-muted);
+    box-shadow: inset 0 0 0 1px var(--xp-line-strong);
+  }
+  .xp-avatar > * {
+    grid-area: 1 / 1;
+  }
+  .xp-avatar-icon {
+    width: 58%;
+    height: 58%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+  }
+  .xp-avatar[data-kind='letters'],
+  .xp-avatar[data-kind='picture'] {
+    box-shadow: none;
+  }
+  .xp-avatar[data-kind='letters'] {
+    background: var(--xp-av-tint, var(--xp-accent));
+    color: #fff;
+  }
+  .xp-avatar[data-kind='letters'] .xp-avatar-icon,
+  .xp-avatar[data-kind='picture'] .xp-avatar-icon {
+    display: none;
+  }
+  /* The letters are generated content, so a labelled button's name stays its label. */
+  .xp-avatar-glyph::before {
+    content: attr(data-letters);
+  }
+  .xp-avatar-glyph {
+    font-size: calc(var(--xp-av) * 0.4);
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    user-select: none;
+  }
+  .xp-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* A faint ring keeps light photos from melting into the page. */
+  .xp-avatar[data-kind='picture']::after {
+    content: '';
+    grid-area: 1 / 1;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgb(15 23 42 / 0.12);
+    pointer-events: none;
+  }
+  /* Cloud save state: green saved, amber waiting, red needs a sign-in. */
+  .xp-avatar-dot {
+    position: absolute;
+    inset-inline-end: 0;
+    bottom: 0;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 2px solid var(--xp-surface);
+    background: var(--xp-good);
+  }
+  .xp-avatar-dot:not([data-dot]),
+  .xp-avatar-dot[data-dot=''] {
+    display: none;
+  }
+  .xp-avatar-dot[data-dot='pending'] {
+    background: #d08a00;
+  }
+  .xp-avatar-dot[data-dot='auth'] {
+    background: var(--xp-bad);
+  }
+}
+@layer components {
+  .lesson h3 {
+    margin: 24px 0 6px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+}

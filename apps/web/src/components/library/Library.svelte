@@ -285,6 +285,8 @@
 
   <p class="text-xs text-muted">
     {t('lib.local')}
+    <a class="text-accent underline underline-offset-2" href={url('user/')}>{t('lib.toProfile')}</a
+    >.
     {#if usage}{t('lib.usage', { used: size(usage.usage) })}{/if}
   </p>
 </div>

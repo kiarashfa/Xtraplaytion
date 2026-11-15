@@ -1,14 +1,27 @@
 import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
 import mdx from '@astrojs/mdx';
 import svelte from '@astrojs/svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
 import { thirdPartyNotices } from './scripts/notices.ts';
+import { AVATAR_INIT_SCRIPT } from './src/lib/account/local.ts';
 import { THEME_INIT_SCRIPT } from './src/lib/theme.ts';
 import { SITE } from './src/site.config.ts';
 
 const sha256 = (s: string) =>
   `sha256-${createHash('sha256').update(s, 'utf8').digest('base64')}` as const;
+
+// Cloud save ids (public by design: an OAuth client id and a PKCE app key are not secrets) come
+// from the repository's .env locally and from the repository variables in CI. Without them the
+// build simply offers no cloud save.
+const ENV_FILE = new URL('../../.env', import.meta.url);
+const ROOT_ENV = existsSync(ENV_FILE) ? parseEnv(readFileSync(ENV_FILE, 'utf8')) : {};
+for (const name of ['GOOGLE_CLIENT_ID', 'DROPBOX_APP_KEY']) {
+  const value = process.env[name] || ROOT_ENV[name];
+  if (value) process.env[`PUBLIC_${name}`] = value;
+}
 
 export default defineConfig({
   site: SITE.url,
@@ -64,13 +77,15 @@ export default defineConfig({
   markdown: { syntaxHighlight: false },
   // Content-Security-Policy as a <meta> tag on every page (GitHub Pages cannot send headers).
   // Astro adds hashes for its own inline scripts and styles. Google Analytics hosts are only
-  // contacted after the visitor accepts analytics in the consent bar.
+  // contacted after the visitor accepts analytics in the consent bar. Google sign-in, Drive and
+  // Dropbox are only contacted after the visitor turns on cloud save in the profile.
   security: {
     csp: {
       directives: [
         "default-src 'self'",
         "img-src 'self' data: blob: https://*.google-analytics.com https://*.googletagmanager.com",
-        "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com",
+        "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://api.dropboxapi.com https://content.dropboxapi.com",
+        'frame-src https://accounts.google.com',
         "font-src 'self'",
         "worker-src 'self' blob:",
         "media-src 'self' blob:",
@@ -79,8 +94,17 @@ export default defineConfig({
         "form-action 'none'",
       ],
       scriptDirective: {
-        resources: ["'self'", 'https://www.googletagmanager.com'],
-        hashes: [sha256(THEME_INIT_SCRIPT)],
+        resources: [
+          "'self'",
+          'https://www.googletagmanager.com',
+          'https://accounts.google.com/gsi/client',
+        ],
+        hashes: [sha256(THEME_INIT_SCRIPT), sha256(AVATAR_INIT_SCRIPT)],
+      },
+      styleDirective: {
+        resources: ["'self'", 'https://accounts.google.com/gsi/style'],
+        // The small <style> element Google's sign-in script adds when it loads.
+        hashes: ['sha256-CKpDAHgt50xplerdFjzFkBTR0zNybnIsrm/NFRbtzFQ='],
       },
     },
   },

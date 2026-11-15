@@ -1,13 +1,13 @@
 // The local library: saved experiments in this browser's IndexedDB. Each entry keeps the
 // settings, a thumbnail and (separately, so listing stays fast) the results as a
-// compressed recording. Nothing leaves the device.
+// compressed recording. The same database keeps the visitor's profile and a note of deleted
+// entries (META), so the save file and the cloud copy can be merged without losing anything.
+import { markChanged } from './account/local.ts';
+import { ENTRIES, LibraryFailure, META, pruneRemoved, req, RESULTS, tx } from './db.ts';
 import { compressRecording, decompressRecording, type Recording } from './recording.ts';
 import { validateState, type ExperimentState } from './share.ts';
 
-const DB = 'xtraplaytion';
-const VERSION = 1;
-const ENTRIES = 'entries';
-const RESULTS = 'results';
+export { LibraryFailure, type LibraryError } from './db.ts';
 
 export interface LibraryEntry {
   id: string;
@@ -24,81 +24,6 @@ export interface LibraryEntry {
   /** Size of the stored results in bytes (0 when there are none). */
   resultBytes: number;
 }
-
-export type LibraryError = 'unavailable' | 'full' | 'missing' | 'failed';
-
-export class LibraryFailure extends Error {
-  readonly code: LibraryError;
-  constructor(code: LibraryError) {
-    super(code);
-    this.code = code;
-  }
-}
-
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function open(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') return reject(new LibraryFailure('unavailable'));
-    let req: IDBOpenDBRequest;
-    try {
-      req = indexedDB.open(DB, VERSION);
-    } catch {
-      return reject(new LibraryFailure('unavailable'));
-    }
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(ENTRIES)) db.createObjectStore(ENTRIES, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(RESULTS)) db.createObjectStore(RESULTS);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(new LibraryFailure('unavailable'));
-    req.onblocked = () => reject(new LibraryFailure('unavailable'));
-  });
-  dbPromise.catch(() => (dbPromise = null));
-  return dbPromise;
-}
-
-function failure(e: unknown): LibraryFailure {
-  if (e instanceof LibraryFailure) return e;
-  const name = e instanceof DOMException ? e.name : '';
-  return new LibraryFailure(name === 'QuotaExceededError' ? 'full' : 'failed');
-}
-
-/** Runs `fn` in one transaction and resolves when it commits. */
-async function tx<T>(
-  stores: string[],
-  mode: IDBTransactionMode,
-  fn: (t: IDBTransaction) => T | Promise<T>,
-): Promise<T> {
-  const db = await open();
-  return new Promise<T>((resolve, reject) => {
-    let t: IDBTransaction;
-    try {
-      t = db.transaction(stores, mode);
-    } catch (e) {
-      return reject(failure(e));
-    }
-    let result: T;
-    t.oncomplete = () => resolve(result);
-    t.onerror = () => reject(failure(t.error));
-    t.onabort = () => reject(failure(t.error));
-    Promise.resolve(fn(t)).then(
-      (r) => (result = r),
-      (e) => {
-        t.abort();
-        reject(failure(e));
-      },
-    );
-  });
-}
-
-const req = <T>(r: IDBRequest<T>) =>
-  new Promise<T>((resolve, reject) => {
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(failure(r.error));
-  });
 
 /** All entries, most recently changed first. Entries that no longer validate are skipped. */
 export async function listEntries(): Promise<LibraryEntry[]> {
@@ -167,6 +92,7 @@ export async function saveEntry(input: SaveInput): Promise<LibraryEntry> {
     if (bytes) t.objectStore(RESULTS).put(bytes, entry.id);
     else t.objectStore(RESULTS).delete(entry.id);
   });
+  markChanged();
   return entry;
 }
 
@@ -181,6 +107,7 @@ export async function renameEntry(id: string, name: string): Promise<void> {
       updated: new Date().toISOString(),
     });
   });
+  markChanged();
 }
 
 export async function duplicateEntry(id: string, name: string): Promise<LibraryEntry> {
@@ -196,14 +123,20 @@ export async function duplicateEntry(id: string, name: string): Promise<LibraryE
     if (raw) t.objectStore(RESULTS).put(raw, copyId);
   });
   if (!copy) throw new LibraryFailure('missing');
+  markChanged();
   return copy;
 }
 
 export async function deleteEntry(id: string): Promise<void> {
-  await tx([ENTRIES, RESULTS], 'readwrite', (t) => {
+  await tx([ENTRIES, RESULTS, META], 'readwrite', async (t) => {
     t.objectStore(ENTRIES).delete(id);
     t.objectStore(RESULTS).delete(id);
+    const meta = t.objectStore(META);
+    const removed = pruneRemoved(await req(meta.get('removed')), Date.now());
+    removed[id] = new Date().toISOString();
+    meta.put(removed, 'removed');
   });
+  markChanged();
 }
 
 /** Used and available storage for this site, when the browser tells. */

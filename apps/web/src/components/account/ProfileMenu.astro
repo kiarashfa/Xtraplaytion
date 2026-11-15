@@ -1,0 +1,275 @@
+---
+// The profile circle in the header and its menu. Everything in it is read from this browser by
+// the script below; the page itself is the same for every visitor. On phones the menu rises
+// from the bottom of the screen.
+import { localeInfo, useTranslations, type MessageKey } from '../../i18n';
+import { AVATAR_INIT_SCRIPT } from '../../lib/account/local.ts';
+import { url } from '../../lib/url.ts';
+
+const t = useTranslations();
+// Message templates the script formats in the browser (counts and names are only known there).
+const keys = [
+  'me.menu',
+  'me.menuNamed',
+  'me.noProfile',
+  'me.count',
+  'me.open',
+  'me.setUp',
+  'me.signOutConfirm',
+  'me.signingOut',
+  'me.signedOut',
+  'me.signOutFailed',
+  'me.signOutCloud',
+  'me.sync.saving',
+  'me.sync.saved',
+  'me.sync.savedAgo',
+  'me.sync.pending',
+  'me.sync.auth',
+] as const satisfies readonly MessageKey[];
+const { catalog } = localeInfo();
+const templates = Object.fromEntries(keys.map((k) => [k, catalog[k]]));
+const person =
+  '<circle cx="12" cy="9" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path>';
+const item = 'xp-menuitem w-full text-[15px] font-medium text-ink no-underline [&[hidden]]:hidden';
+---
+
+<div class="relative" data-profile data-strings={JSON.stringify(templates)}>
+  <button
+    type="button"
+    class="relative grid size-11 cursor-pointer place-items-center rounded-full aria-expanded:outline-2 aria-expanded:outline-offset-1 aria-expanded:outline-accent"
+    aria-expanded="false"
+    aria-controls="xp-profile-menu"
+    aria-label={t('me.menu')}
+    title={t('me.menu')}
+    data-profile-trigger
+  >
+    <span class="xp-avatar max-md:[--xp-av:42px]" aria-hidden="true" data-avatar>
+      <svg class="xp-avatar-icon" viewBox="0 0 24 24" aria-hidden="true" set:html={person} />
+    </span>
+    <span class="xp-avatar-dot end-0.5! bottom-0.5!" data-cloud-dot></span>
+  </button>
+  <div
+    class="fixed inset-0 z-40 bg-ink/35 md:hidden [&[hidden]]:hidden"
+    data-profile-backdrop
+    hidden
+  ></div>
+  <div
+    id="xp-profile-menu"
+    class="z-50 flex flex-col bg-surface p-1.5 text-start max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:rounded-t-2xl max-md:border-t max-md:border-line-strong max-md:pb-[max(6px,env(safe-area-inset-bottom))] md:absolute md:end-0 md:top-full md:mt-2 md:w-72 md:rounded-xl md:border md:border-line-strong md:shadow-[var(--xp-shadow)] [&[hidden]]:hidden"
+    hidden
+    data-profile-menu
+  >
+    <div class="flex items-center gap-3 border-b border-line px-2.5 pt-2 pb-3">
+      <span class="xp-avatar [--xp-av:44px]" aria-hidden="true" data-avatar>
+        <svg class="xp-avatar-icon" viewBox="0 0 24 24" aria-hidden="true" set:html={person} />
+      </span>
+      <div class="min-w-0">
+        <p class="truncate font-semibold" data-profile-name>
+          {t('me.menu')}
+        </p>
+        <p class="text-[13px] text-muted" data-profile-sub>
+          {t('me.noProfile')}
+        </p>
+      </div>
+    </div>
+    <p
+      class="flex items-center gap-2 border-b border-line px-2.5 py-2 text-[13px] text-muted [&[hidden]]:hidden"
+      data-profile-sync
+      hidden
+    >
+      <i class="xp-avatar-dot static! size-2! border-0!" data-cloud-dot></i>
+      <span></span>
+    </p>
+    <nav class="flex flex-col py-1" aria-label={t('me.menu')}>
+      <a href={url('user/')} class={item} data-profile-main>
+        {t('me.open')}
+      </a>
+      <a href={url('library/')} class={item}>
+        {t('me.library')}
+      </a>
+      <button type="button" class={item} data-profile-download hidden>
+        {t('me.download')}
+      </button>
+      <button
+        type="button"
+        class={`${item} mt-1 border-t border-line text-muted!`}
+        data-profile-out
+        hidden
+      >
+        {t('me.signOut')}
+      </button>
+    </nav>
+    {/* Shown only when signing out would lose experiments kept nowhere else. */}
+    <div
+      class="rounded-lg bg-surface-2 p-3 text-[14px] [&[hidden]]:hidden"
+      data-profile-confirm
+      hidden
+    >
+      <p class="mb-2.5" data-profile-warning></p>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="xp-btn min-h-11" data-profile-download-first>
+          {t('me.download')}
+        </button>
+        <button type="button" class="xp-btn min-h-11 border-bad! text-bad" data-profile-out-anyway>
+          {t('me.signOutAnyway')}
+        </button>
+      </div>
+    </div>
+    <p class="px-2.5 text-[14px] text-muted empty:hidden" role="status" data-profile-note></p>
+  </div>
+  {/* Paints the stored photo or initials before first paint; its hash is in astro.config.ts. */}
+  <script is:inline set:html={AVATAR_INIT_SCRIPT} />
+</div>
+
+<script>
+  import { createFormatter } from '../../i18n/format.ts';
+  import {
+    ago,
+    cloudDot,
+    cloudState,
+    onLocalChange,
+    paintAvatar,
+    profileMirror,
+    PROVIDERS,
+  } from '../../lib/account/local.ts';
+  import { countEntries } from '../../lib/db.ts';
+
+  const root = document.querySelector<HTMLElement>('[data-profile]');
+  if (root) {
+    const strings = JSON.parse(root.dataset['strings'] ?? '{}') as Record<string, string>;
+    const formatter = createFormatter(document.documentElement.lang || 'en');
+    const t = (key: string, params?: Record<string, string | number>) =>
+      formatter.format(strings[key] ?? key, params);
+    const $ = <T extends HTMLElement>(selector: string): T => {
+      const el = root.querySelector<T>(selector);
+      if (!el) throw new Error(`missing ${selector}`);
+      return el;
+    };
+    const trigger = $<HTMLButtonElement>('[data-profile-trigger]');
+    const menu = $('[data-profile-menu]');
+    const backdrop = $('[data-profile-backdrop]');
+    const note = $('[data-profile-note]');
+    const confirmBox = $('[data-profile-confirm]');
+    let count = 0;
+
+    const paint = () => {
+      const profile = profileMirror();
+      for (const el of root.querySelectorAll<HTMLElement>('[data-avatar]'))
+        paintAvatar(el, profile);
+      const cloud = cloudState();
+      const dot = cloudDot(cloud);
+      for (const el of root.querySelectorAll<HTMLElement>('[data-cloud-dot]'))
+        el.dataset['dot'] = dot ?? '';
+      const name = profile?.name.trim();
+      $('[data-profile-name]').textContent = name || t('me.menu');
+      const label = name ? t('me.menuNamed', { name }) : t('me.menu');
+      trigger.setAttribute('aria-label', label);
+      trigger.title = label;
+      const sync = $('[data-profile-sync]');
+      sync.hidden = !cloud;
+      if (cloud) {
+        const where = PROVIDERS[cloud.provider];
+        $('[data-profile-sync] span').textContent =
+          dot === 'auth'
+            ? t('me.sync.auth', { where })
+            : dot === 'pending'
+              ? t('me.sync.pending', { where })
+              : cloud.savedAt
+                ? t('me.sync.savedAgo', { where, ago: ago(cloud.savedAt) })
+                : t('me.sync.saved', { where });
+      }
+    };
+
+    // The library is counted when the menu opens.
+    const readSave = async () => {
+      count = await countEntries().catch(() => 0);
+      const profile = profileMirror();
+      const has = count > 0 || !!profile;
+      $('[data-profile-sub]').textContent = has ? t('me.count', { count }) : t('me.noProfile');
+      $('[data-profile-download]').hidden = !has;
+      $('[data-profile-out]').hidden = !has && !cloudState();
+      $('[data-profile-main]').textContent = has ? t('me.open') : t('me.setUp');
+    };
+
+    const setOpen = (open: boolean) => {
+      if (open) {
+        note.textContent = '';
+        confirmBox.hidden = true;
+        // With a cloud save, the code that saves before signing out loads ahead of the click.
+        if (cloudState()) void import('../../lib/account/signout.ts').then((m) => m.warmUp());
+      }
+      menu.hidden = !open;
+      backdrop.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) {
+        paint();
+        void readSave().then(() => menu.querySelector<HTMLElement>('a')?.focus());
+      }
+    };
+
+    const download = async () => {
+      const [{ exportSave, SAVE_FILE_NAME }, { downloadText }] = await Promise.all([
+        import('../../lib/account/save.ts'),
+        import('../../lib/file.ts'),
+      ]);
+      const { text } = await exportSave();
+      downloadText(text, SAVE_FILE_NAME);
+    };
+
+    const signOut = async () => {
+      const buttons = root.querySelectorAll<HTMLButtonElement>(
+        '[data-profile-out], [data-profile-confirm] button',
+      );
+      buttons.forEach((b) => (b.disabled = true));
+      note.textContent = t('me.signingOut');
+      const cloud = cloudState();
+      try {
+        const m = await import('../../lib/account/signout.ts');
+        await m.signOut();
+        confirmBox.hidden = true;
+        paint();
+        await readSave();
+        note.textContent = t('me.signedOut');
+      } catch {
+        note.textContent = cloud
+          ? t('me.signOutCloud', { where: PROVIDERS[cloud.provider] })
+          : t('me.signOutFailed');
+      } finally {
+        buttons.forEach((b) => (b.disabled = false));
+      }
+    };
+
+    trigger.addEventListener('click', () => setOpen(menu.hidden === true));
+    backdrop.addEventListener('click', () => setOpen(false));
+    // The event's path, not its target: opening repaints the circle, so a clicked photo may
+    // already be gone from the page when this runs.
+    document.addEventListener('click', (event) => {
+      if (!menu.hidden && !event.composedPath().includes(root)) setOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !menu.hidden) {
+        setOpen(false);
+        trigger.focus();
+      }
+    });
+    $('[data-profile-download]').addEventListener('click', () => {
+      void download();
+      setOpen(false);
+    });
+    // Experiments kept only here get a warning first; with a cloud save, signing out is direct.
+    $('[data-profile-out]').addEventListener('click', () => {
+      if (!cloudState() && count > 0) {
+        $('[data-profile-warning]').textContent = t('me.signOutConfirm', { count });
+        confirmBox.hidden = false;
+        $('[data-profile-download-first]').focus();
+      } else void signOut();
+    });
+    $('[data-profile-download-first]').addEventListener('click', () => void download());
+    $('[data-profile-out-anyway]').addEventListener('click', () => void signOut());
+
+    onLocalChange(paint);
+    paint();
+    // Keeps the cloud save current from every page (loaded only when one is connected).
+    if (cloudState()) void import('../../lib/account/cloud.ts').then((m) => m.startAutoSave());
+  }
+</script>

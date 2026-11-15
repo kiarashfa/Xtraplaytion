@@ -1,0 +1,17 @@
+---
+import ProfilePage from '../components/account/ProfilePage.svelte';
+import { useTranslations } from '../i18n';
+import Base from '../layouts/Base.astro';
+
+const t = useTranslations();
+---
+
+<Base title={t('user.title')} description={t('user.description')}>
+  <section class="mx-auto w-full max-w-5xl py-8 sm:py-10">
+    <ProfilePage client:only="svelte">
+      <p slot="fallback" class="text-muted">
+        {t('user.loading')}
+      </p>
+    </ProfilePage>
+  </section>
+</Base>

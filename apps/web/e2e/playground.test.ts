@@ -1,6 +1,6 @@
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
-import { openPage, targets } from './browsers.ts';
+import { hydrated, openPage, targets } from './browsers.ts';
 
 const baseURL = inject('baseURL');
 
@@ -72,6 +72,7 @@ describe.each(targets)('$name', (target) => {
     const link = page.url();
     const fresh = await context.newPage();
     await fresh.goto(link);
+    await hydrated(fresh);
     await expect
       .poll(() => fresh.getByRole('textbox', { name: 'f(x) =' }).inputValue())
       .toBe('exp(-x^2) cos(5x)');
@@ -86,11 +87,13 @@ describe.each(targets)('$name', (target) => {
   test('preset links and bad links', async () => {
     const { context, page } = await openPage(browser, target, baseURL);
     await page.goto('./playground/#preset=sine-gap');
+    await hydrated(page);
     await expect
       .poll(() => page.getByRole('textbox', { name: 'f(x) =' }).inputValue())
       .toBe('sin(3x)');
     await page.goto('./playground/#s=not-a-real-link');
     await page.reload();
+    await hydrated(page);
     await expect
       .poll(() => page.getByText('This link could not be read').first().isVisible())
       .toBe(true);
@@ -185,8 +188,8 @@ describe.each(targets)('$name', (target) => {
     await expect.poll(() => page.url()).toContain('#s=');
     const fresh = await context.newPage();
     await fresh.goto(page.url());
-    // A fresh tab rebuilds the race from the link; slow CI runners need longer than the default.
-    await expect.poll(() => fresh.locator('table tbody tr').count(), { timeout: 20_000 }).toBe(4);
+    await hydrated(fresh);
+    await expect.poll(() => fresh.locator('table tbody tr').count()).toBe(4);
     await showTab(fresh, 'Models');
     await fresh.getByRole('button', { name: 'Edit P2' }).click();
     expect(await fresh.getByRole('spinbutton', { name: 'Degree' }).inputValue()).toBe('11');
@@ -240,6 +243,7 @@ describe.each(targets)('$name', (target) => {
     });
     await page.goto(`./playground/#s=${code}`);
     await page.reload();
+    await hydrated(page);
     await expect.poll(() => page.getByRole('textbox', { name: 'f(x) =' }).inputValue()).toBe('x^2');
     await showTab(page, 'Models');
     await page.getByRole('button', { name: 'Edit N1' }).click();

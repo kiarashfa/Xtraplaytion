@@ -2,7 +2,7 @@
 // exactly the same CPU runs.
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest';
-import { openPage, targets } from './browsers.ts';
+import { hydrated, openPage, targets } from './browsers.ts';
 
 const baseURL = inject('baseURL');
 
@@ -89,6 +89,7 @@ describe.each(targets)('$name', (target) => {
     const range = await page.locator('[data-drawn-range]').textContent();
     const fresh = await context.newPage();
     await fresh.goto(page.url());
+    await hydrated(fresh);
     await expect.poll(() => fresh.locator('[data-drawn-range]').textContent()).toBe(range);
     expect(problems).toEqual([]);
     await context.close();
@@ -141,6 +142,7 @@ describe.each(targets)('$name', (target) => {
     await expect.poll(() => page.url()).toContain('#s=');
     const viaLink = await context.newPage();
     await viaLink.goto(page.url(), { waitUntil: 'networkidle' });
+    await hydrated(viaLink);
     await expect.poll(() => viaLink.locator('table tbody tr').count()).toBe(2);
     await viaLink.waitForTimeout(300);
     expect(await race(viaLink, 300)).toEqual(original);
@@ -156,6 +158,7 @@ describe.each(targets)('$name', (target) => {
     const path = await download.path();
     const viaFile = await context.newPage();
     await viaFile.goto('./playground/', { waitUntil: 'networkidle' });
+    await hydrated(viaFile);
     await viaFile.locator('[data-open-file]').setInputFiles(path);
     await expect.poll(() => viaFile.locator('table tbody tr').count()).toBe(2);
     await viaFile.waitForTimeout(300);

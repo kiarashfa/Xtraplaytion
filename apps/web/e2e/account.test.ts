@@ -144,21 +144,32 @@ describe.each(targets)('$name', (target) => {
     }
     // A stand-in for Dropbox, shared by both browsers.
     const cloud = { file: null as string | null, rev: 0, revoked: 0 };
+    // Clicks Connect, waits until the page has really left for Dropbox, then comes back the way
+    // Dropbox sends visitors back: to the redirect address with a code and the same state.
+    const connectDropbox = async (p: Page) => {
+      const [request] = await Promise.all([
+        p.waitForRequest((r) => r.url().startsWith('https://www.dropbox.com/oauth2/authorize?')),
+        p.locator('[data-cloud-connect=dropbox]').click(),
+      ]);
+      await p.waitForURL((u) => u.hostname === 'www.dropbox.com');
+      const q = new URL(request.url()).searchParams;
+      const back = new URL(q.get('redirect_uri') ?? '');
+      back.search = new URLSearchParams({
+        code: 'test-code',
+        state: q.get('state') ?? '',
+      }).toString();
+      await p.goto(back.href);
+      await hydrated(p);
+    };
     const answer = async (p: Page) => {
-      await p.route('https://www.dropbox.com/oauth2/authorize?**', (route) => {
-        const q = new URL(route.request().url()).searchParams;
-        const back = new URL(q.get('redirect_uri') ?? '');
-        back.search = new URLSearchParams({
-          code: 'test-code',
-          state: q.get('state') ?? '',
-        }).toString();
-        // A page that sends the visitor back (WebKit cannot fulfill a request with a redirect).
-        return route.fulfill({
+      // Dropbox's sign-in page (connectDropbox plays the visitor coming back from it).
+      await p.route('https://www.dropbox.com/**', (route) =>
+        route.fulfill({
           status: 200,
           contentType: 'text/html',
-          body: `<!doctype html><meta http-equiv="refresh" content="0;url=${back.href.replace(/&/g, '&amp;')}">`,
-        });
-      });
+          body: '<!doctype html><title>Dropbox</title>',
+        }),
+      );
       await p.route('https://api.dropboxapi.com/**', (route) => {
         const path = new URL(route.request().url()).pathname;
         const json = (status: number, body: unknown) =>
@@ -192,8 +203,7 @@ describe.each(targets)('$name', (target) => {
     await answer(page);
     await addExperiment(page, 'Kept in the cloud');
     await setUpProfile(page, 'Alan Turing');
-    await page.locator('[data-cloud-connect=dropbox]').click();
-    await page.waitForURL(/\/user\/$/);
+    await connectDropbox(page);
     await expect
       .poll(() => page.locator('[data-user-notice]').textContent())
       .toContain('Saved to Dropbox');
@@ -215,8 +225,8 @@ describe.each(targets)('$name', (target) => {
     const other = await openPage(browser, target, baseURL);
     await answer(other.page);
     await other.page.goto('./user/', { waitUntil: 'networkidle' });
-    await other.page.locator('[data-cloud-connect=dropbox]').click();
-    await other.page.waitForURL(/\/user\/$/);
+    await hydrated(other.page);
+    await connectDropbox(other.page);
     await expect
       .poll(() => other.page.locator('[data-user-notice]').textContent())
       .toContain('Brought in 1 new experiment and your profile from Dropbox');

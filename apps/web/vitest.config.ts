@@ -19,6 +19,9 @@ export default defineConfig({
           globalSetup: ['e2e/setup.ts'],
           testTimeout: 30_000,
           hookTimeout: 60_000,
+          // Browsers on shared CI runners (WebKit on Linux most of all) can take several seconds
+          // to start a page; polls wait for what they check, not for a fixed short time.
+          expect: { poll: { timeout: 20_000 } },
         },
       },
     ],

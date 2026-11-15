@@ -2,7 +2,8 @@
   // Lesson island: the visitor draws a curve across the whole plot (or picks an example),
   // the models train on the shaded middle only, and the drawing judges how each one
   // continues it beyond the data.
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { reportRound } from '../../lib/account/learning.ts';
   import { useTranslations, type MessageKey } from '../../i18n';
   import { modelName, Playground } from '../../lib/playground.svelte.ts';
   import { modelSummary } from '../../lib/describe.ts';
@@ -95,9 +96,29 @@
     const m = pg.models[i];
     return m ? `${modelName(m)} · ${modelSummary(m, t)}` : '';
   };
+
+  // Each finished round goes into the challenge record (errors beyond the data, the winner and
+  // the guess), and counts towards the lesson.
+  let reported = false;
+  $effect(() => {
+    if (!done || winner < 0) {
+      reported = false;
+      return;
+    }
+    if (reported) return;
+    reported = true;
+    untrack(() => {
+      const errors: Record<string, number> = {};
+      pg.runs.forEach((r, i) => {
+        const v = r.frameAt(pg.viewEpoch)?.metrics.beyond ?? NaN;
+        if (Number.isFinite(v)) errors[name(i)] = v;
+      });
+      reportRound({ winner: name(winner), guess: pick === null ? null : name(pick), errors });
+    });
+  });
 </script>
 
-<div class="not-prose my-6 flex flex-col gap-4" data-draw-challenge>
+<div class="not-prose my-6 flex flex-col gap-4" data-draw-challenge data-race-key="draw">
   <div class="xp-card p-4 sm:p-5">
     <span
       class="inline-flex h-6 items-center rounded-full bg-accent-soft px-2.5 text-xs font-semibold text-accent"

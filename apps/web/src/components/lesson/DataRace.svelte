@@ -4,6 +4,8 @@
   // the whole plot, then watch. Scored against the true function on the whole plot range.
   import { onMount, untrack } from 'svelte';
   import { useTranslations } from '../../i18n';
+  import { reportRace } from '../../lib/account/learning.ts';
+  import PastGuess from './PastGuess.svelte';
   import { Playground } from '../../lib/playground.svelte.ts';
   import { PRESETS } from '../../lib/presets.ts';
   import { url } from '../../lib/url.ts';
@@ -83,19 +85,42 @@
   const nf = new Intl.NumberFormat('en');
   const num = (v: number) => (Number.isFinite(v) ? v.toFixed(3) : '-');
 
+  // A finished race counts towards the lesson, and the first guess is kept.
+  const raceKey = $derived(`data:${presets.join('+')}`);
+  let reported = false;
+  $effect(() => {
+    if (!done || winner < 0) {
+      reported = false;
+      return;
+    }
+    if (reported) return;
+    reported = true;
+    untrack(() =>
+      reportRace(raceKey, {
+        guess: pick === null ? null : (labels[pick] ?? null),
+        winner: labels[winner] ?? '',
+      }),
+    );
+  });
+
   function toggle() {
     if (running) races.forEach((pg) => pg.pause());
     else races.forEach((pg) => pg.play());
   }
 </script>
 
-<div class="not-prose my-6 flex flex-col gap-4" data-data-race={presets.join(' ')}>
+<div
+  class="not-prose my-6 flex flex-col gap-4"
+  data-data-race={presets.join(' ')}
+  data-race-key={raceKey}
+>
   <div class="xp-card p-4 sm:p-5">
     <span
       class="inline-flex h-6 items-center rounded-full bg-accent-soft px-2.5 text-xs font-semibold text-accent"
       >{t('predict.badge')}</span
     >
     <p class="mt-2 mb-3 font-semibold">{question}</p>
+    <PastGuess {raceKey} />
     <div
       class="grid grid-cols-1 gap-2.5 sm:grid-cols-3"
       role="radiogroup"

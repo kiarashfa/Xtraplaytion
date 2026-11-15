@@ -904,6 +904,42 @@ const en = {
   'cloud.error.tooBig':
     'Your save is too large for the cloud ({size}). Delete some saved experiments and try again.',
   'cloud.error.failed': 'Saving to the cloud failed. Try again.',
+  'user.merge.learning': 'your learning progress',
+
+  'learn.label': 'Lesson progress',
+  'learn.title': 'Learning',
+  'learn.pendingStatic':
+    'Play the races on this page and read to the end, and this lesson counts as learned.',
+  'learn.pending':
+    'Play the races on this page and read to the end, and this lesson counts as learned.',
+  'learn.racesDone': '{done} of {total} finished.',
+  'learn.learnedOn': 'Learned on {date}. {count} of {total} lessons learned.',
+  'learn.unmarked': 'Not marked as learned.',
+  'learn.mark': 'Mark as learned',
+  'learn.unmark': 'Mark as not learned',
+  'learn.learned': 'Learned',
+  'learn.notYet': 'Not learned yet',
+  'learn.progress': '{count} of {total} lessons learned',
+  'learn.continue': 'Continue with lesson {n}: {title}',
+  'learn.continueShort': 'Continue: lesson {n}',
+  'learn.start': 'Start the first lesson',
+  'learn.allDone': 'Every lesson learned. Well done!',
+  'learn.guesses':
+    '{total, plural, one {# first guess in the lesson races, {right} right.} other {# first guesses in the lesson races, {right} right.}}',
+  'learn.pastRight': 'Your first guess here was {guess}, and it was right.',
+  'learn.pastWrong': 'Your first guess here was {guess}. The race showed otherwise.',
+  'learn.challenge.title': 'Drawing challenge',
+  'learn.challenge.summary':
+    '{rounds, plural, one {# round played} other {# rounds played}}, {right} of {guessed} guesses right.',
+  'learn.challenge.model': 'Model',
+  'learn.challenge.wins': 'Wins',
+  'learn.challenge.best': 'Best error beyond',
+  'learn.favorites.title': 'Favorite races',
+  'learn.favorites.empty': 'Star races in the gallery to keep them here.',
+  'learn.favorites.opened': 'You opened {count} of {total} gallery races.',
+  'learn.favorites.gallery': 'Open the gallery',
+  'learn.opened': 'Opened',
+  'learn.favorite': 'Favorite: {title}',
 } as const;
 
 export type MessageKey = keyof typeof en;

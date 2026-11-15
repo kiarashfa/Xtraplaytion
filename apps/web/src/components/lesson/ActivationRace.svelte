@@ -2,7 +2,9 @@
   // Lesson island: predict, then race several activations on the same data.
   import { buildDataset, mlp, type Activation, type RegionMetrics } from '@xtraplaytion/engine';
   import { compile, parse } from '@xtraplaytion/expr';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { reportRace } from '../../lib/account/learning.ts';
+  import PastGuess from './PastGuess.svelte';
   import { useTranslations, type MessageKey } from '../../i18n';
   import { autoYDomain, drawFit, PlotLayers, type SceneTheme } from '../../lib/scene/draw.ts';
   import { Trainer } from '../../lib/trainer.ts';
@@ -156,15 +158,31 @@
   });
 
   const name = (i: number) => t(`act.${activations[i]}` as MessageKey);
+
+  // A finished race counts towards the lesson, and the first guess is kept.
+  const raceKey = $derived(`activations:${preset}`);
+  let reported = false;
+  $effect(() => {
+    if (status !== 'done' || winner < 0) {
+      reported = false;
+      return;
+    }
+    if (reported) return;
+    reported = true;
+    untrack(() =>
+      reportRace(raceKey, { guess: pick === null ? null : name(pick), winner: name(winner) }),
+    );
+  });
 </script>
 
-<div class="not-prose my-6 flex flex-col gap-4">
+<div class="not-prose my-6 flex flex-col gap-4" data-race-key={raceKey}>
   <div class="xp-card p-4 sm:p-5">
     <span
       class="inline-flex h-6 items-center rounded-full bg-accent-soft px-2.5 text-xs font-semibold text-accent"
       >{t('predict.badge')}</span
     >
     <p class="mt-2 mb-3 font-semibold">{question}</p>
+    <PastGuess {raceKey} />
     <div
       class="grid grid-cols-1 gap-2.5 sm:grid-cols-3"
       role="radiogroup"

@@ -18,6 +18,14 @@
     type MergeSummary,
     type Profile,
   } from '../../lib/account/save.ts';
+  import {
+    emptyLearning,
+    getLearning,
+    hasLearning,
+    learningMirror,
+    mirrorLearning,
+    type Learning,
+  } from '../../lib/account/learning.ts';
   import { visitor } from '../../lib/account/visitor.svelte.ts';
   import { downloadText } from '../../lib/file.ts';
   import { listEntries, type LibraryEntry } from '../../lib/library.ts';
@@ -25,11 +33,13 @@
   import Icon from '../Icon.svelte';
   import Avatar from './Avatar.svelte';
   import CloudSave from './CloudSave.svelte';
+  import LearningCard from './LearningCard.svelte';
   import type ProfileDialog from './ProfileDialog.svelte';
 
   const t = useTranslations();
   let profile = $state.raw<Profile | null>(null);
   let entries = $state.raw<LibraryEntry[]>([]);
+  let learning = $state.raw<Learning>(emptyLearning());
   let loaded = $state(false);
   let blocked = $state(false);
   let notice = $state('');
@@ -42,7 +52,7 @@
   // Object URLs of thumbnails (not reactive state: revoked when the page goes away).
   const thumbs: Record<string, string> = {};
 
-  const welcome = $derived(loaded && !profile && entries.length === 0);
+  const welcome = $derived(loaded && !profile && entries.length === 0 && !hasLearning(learning));
   const trained = $derived(entries.filter((e) => e.epoch > 0));
   const models = $derived(trained.reduce((n, e) => n + e.models.length, 0));
   const epochs = $derived(trained.reduce((n, e) => n + e.epoch, 0));
@@ -66,7 +76,12 @@
 
   async function reload() {
     try {
-      [profile, entries] = await Promise.all([refreshMirror(), listEntries()]);
+      [profile, entries, learning] = await Promise.all([
+        refreshMirror(),
+        listEntries(),
+        getLearning().catch(() => learningMirror()),
+      ]);
+      mirrorLearning(learning);
       blocked = false;
     } catch {
       blocked = true;
@@ -334,6 +349,8 @@
           </div>
         </section>
       </div>
+
+      <LearningCard {learning} />
 
       <section class="xp-card p-5" aria-labelledby="recent-title">
         <div class="mb-3 flex flex-wrap items-center gap-2">

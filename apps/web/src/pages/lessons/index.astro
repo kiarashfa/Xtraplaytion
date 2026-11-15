@@ -1,26 +1,81 @@
 ---
-import { useTranslations } from '../../i18n';
+import { localeInfo, useTranslations, type MessageKey } from '../../i18n';
 import Base from '../../layouts/Base.astro';
 import { LESSONS } from '../../lib/lessons.ts';
 import { url } from '../../lib/url.ts';
 
 const t = useTranslations();
 const lessons = LESSONS;
+const keys = [
+  'learn.progress',
+  'learn.continue',
+  'learn.allDone',
+] as const satisfies readonly MessageKey[];
+const { catalog } = localeInfo();
+const templates = Object.fromEntries(keys.map((k) => [k, catalog[k]]));
 ---
 
 <Base title={t('lessons.title')} description={t('lessons.description')}>
   <section class="py-8 sm:py-12">
     <h1 class="text-4xl font-bold tracking-tight">{t('lessons.title')}</h1>
     <p class="mt-3 max-w-2xl text-lg text-muted">{t('lessons.lead')}</p>
+    {/* Shown when this browser has learned something (filled in by the script below). */}
+    <div
+      class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 [&[hidden]]:hidden"
+      data-lessons-progress
+      data-strings={JSON.stringify(templates)}
+      data-order={JSON.stringify(lessons.map((l) => ({ slug: l.slug, n: l.n, title: l.title })))}
+      hidden
+    >
+      <div
+        class="h-2 w-40 overflow-hidden rounded-full bg-line"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax={lessons.length}
+        aria-label={t('learn.label')}
+        data-progress-bar
+      >
+        <div class="h-full w-0 rounded-full bg-good" data-progress-fill></div>
+      </div>
+      <span class="text-sm font-semibold" data-progress-count></span>
+      <a
+        class="text-sm font-medium text-accent underline underline-offset-2"
+        href=""
+        data-continue
+      ></a>
+    </div>
     <ul class="mt-8 grid gap-4 sm:grid-cols-2">
       {lessons.map((l) => (
         <li>
           <a
             href={url(`lessons/${l.slug}/`)}
             class="xp-card flex h-full flex-col gap-2 p-5 hover:border-accent"
+            data-lesson-card={l.slug}
           >
-            <span class="text-[13px] font-semibold text-accent">
-              {t('lessons.lesson', { n: l.n })} · {t('lessons.minutes', { n: l.minutes })}
+            <span class="flex items-center justify-between gap-2 text-[13px] font-semibold text-accent">
+              <span>
+                {t('lessons.lesson', { n: l.n })} · {t('lessons.minutes', { n: l.minutes })}
+              </span>
+              <span
+                class="inline-flex h-6 items-center gap-1 rounded-full bg-good px-2 text-xs font-semibold text-surface [&[hidden]]:hidden"
+                data-learned-badge
+                hidden
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m5 12 4.5 4.5L19 7" />
+                </svg>
+                {t('learn.learned')}
+              </span>
             </span>
             <span class="text-xl font-bold tracking-tight">{l.title}</span>
             <span class="text-muted">{l.summary}</span>
@@ -30,3 +85,56 @@ const lessons = LESSONS;
     </ul>
   </section>
 </Base>
+
+<script>
+  import { createFormatter } from '../../i18n/format.ts';
+  import { isLearned, learningMirror } from '../../lib/account/learning.ts';
+  import { onLocalChange } from '../../lib/account/local.ts';
+  import { url } from '../../lib/url.ts';
+
+  const box = document.querySelector<HTMLElement>('[data-lessons-progress]');
+  if (box) {
+    const strings = JSON.parse(box.dataset['strings'] ?? '{}') as Record<string, string>;
+    const order = JSON.parse(box.dataset['order'] ?? '[]') as {
+      slug: string;
+      n: number;
+      title: string;
+    }[];
+    const formatter = createFormatter(document.documentElement.lang || 'en');
+    const t = (key: string, params?: Record<string, string | number>) =>
+      formatter.format(strings[key] ?? key, params);
+    const $ = <T extends Element = HTMLElement>(selector: string): T => {
+      const el = box.querySelector<T>(selector);
+      if (!el) throw new Error(`missing ${selector}`);
+      return el;
+    };
+    const paint = () => {
+      const l = learningMirror();
+      let count = 0;
+      for (const card of document.querySelectorAll<HTMLElement>('[data-lesson-card]')) {
+        const learned = isLearned(l, card.dataset['lessonCard'] ?? '');
+        if (learned) count++;
+        const badge = card.querySelector<HTMLElement>('[data-learned-badge]');
+        if (badge) badge.hidden = !learned;
+      }
+      box.hidden = count === 0;
+      if (!count) return;
+      const total = order.length;
+      $('[data-progress-fill]').style.width = `${(100 * count) / total}%`;
+      $('[data-progress-bar]').setAttribute('aria-valuenow', String(count));
+      $('[data-progress-count]').textContent = t('learn.progress', {
+        count,
+        total,
+      });
+      const next = order.find((x) => !isLearned(l, x.slug));
+      const link = $<HTMLAnchorElement>('[data-continue]');
+      link.hidden = !next;
+      if (next) {
+        link.href = url(`lessons/${next.slug}/`);
+        link.textContent = t('learn.continue', { n: next.n, title: next.title });
+      }
+    };
+    onLocalChange(paint);
+    paint();
+  }
+</script>

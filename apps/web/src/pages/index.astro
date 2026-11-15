@@ -1,10 +1,13 @@
 ---
 import ExtrapolationFigure from '../components/ExtrapolationFigure.astro';
-import { useTranslations } from '../i18n';
+import { localeInfo, useTranslations } from '../i18n';
+import { LESSONS } from '../lib/lessons.ts';
 import Base from '../layouts/Base.astro';
 import { url } from '../lib/url.ts';
 
 const t = useTranslations();
+const continueTemplate = localeInfo().catalog['learn.continueShort'];
+const order = LESSONS.map((l) => ({ slug: l.slug, n: l.n }));
 const features = [
   t('home.feature.target'),
   t('home.feature.ood'),
@@ -33,6 +36,8 @@ const features = [
       <a
         href={url('lessons/activations-and-extrapolation/')}
         class="xp-btn min-h-12 px-5 text-base"
+        data-continue-lesson={continueTemplate}
+        data-order={JSON.stringify(order)}
       >
         {t('home.ctaLesson')}
       </a>
@@ -61,3 +66,24 @@ const features = [
     </div>
   </section>
 </Base>
+
+<script>
+  // With lessons learned in this browser, the lesson button continues where the visitor left off.
+  import { createFormatter } from '../i18n/format.ts';
+  import { isLearned, learningMirror } from '../lib/account/learning.ts';
+  import { url } from '../lib/url.ts';
+
+  const link = document.querySelector<HTMLAnchorElement>('[data-continue-lesson]');
+  if (link) {
+    const order = JSON.parse(link.dataset['order'] ?? '[]') as { slug: string; n: number }[];
+    const l = learningMirror();
+    const next = order.find((x) => !isLearned(l, x.slug));
+    if (next && order.some((x) => isLearned(l, x.slug))) {
+      link.href = url(`lessons/${next.slug}/`);
+      link.textContent = createFormatter(document.documentElement.lang || 'en').format(
+        link.dataset['continueLesson'] ?? '',
+        { n: next.n },
+      );
+    }
+  }
+</script>

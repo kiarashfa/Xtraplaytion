@@ -36,7 +36,16 @@ const lessonOf = (slug?: string) => LESSONS.find((l) => l.slug === slug);
               </GalleryThumb>
             </a>
             <div class="flex flex-1 flex-col gap-1.5 p-4">
-              <h2 class="text-lg font-bold tracking-tight">{g.title}</h2>
+              <div class="flex items-start gap-2">
+                <h2 class="flex-1 text-lg font-bold tracking-tight">{g.title}</h2>
+                <span
+                  class="mt-1 inline-flex h-6 flex-none items-center rounded-full bg-line px-2 text-xs font-semibold text-muted [&[hidden]]:hidden"
+                  data-opened-badge
+                  hidden
+                >
+                  {t('learn.opened')}
+                </span>
+              </div>
               <p class="flex-1 text-[14.5px] text-muted">{g.text}</p>
               <div class="mt-2 flex flex-wrap items-center gap-2">
                 <a href={url(`playground/#preset=${g.id}`)} class="xp-btn xp-btn-primary min-h-11">
@@ -47,6 +56,27 @@ const lessonOf = (slug?: string) => LESSONS.find((l) => l.slug === slug);
                     {t('lessons.lesson', { n: lesson.n })}
                   </a>
                 )}
+                <button
+                  type="button"
+                  class="ms-auto grid size-11 place-items-center rounded-full text-muted hover:text-ink"
+                  aria-pressed="false"
+                  aria-label={t('learn.favorite', { title: g.title })}
+                  title={t('learn.favorite', { title: g.title })}
+                  data-fav={g.id}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="22"
+                    height="22"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+                  </svg>
+                </button>
               </div>
             </div>
           </li>
@@ -56,3 +86,45 @@ const lessonOf = (slug?: string) => LESSONS.find((l) => l.slug === slug);
     <p class="mt-8 text-muted">{t('gallery.note')}</p>
   </section>
 </Base>
+
+<style>
+  [data-fav][aria-pressed='true'] {
+    color: #a16207;
+  }
+  :global([data-theme='dark']) [data-fav][aria-pressed='true'] {
+    color: #f5b83d;
+  }
+  [data-fav][aria-pressed='true'] svg {
+    fill: currentColor;
+  }
+</style>
+
+<script>
+  // Favorites and races already opened, from the visitor's learning record (kept in the save).
+  import { learningMirror, markOpened, setFavorite } from '../lib/account/learning.ts';
+  import { onLocalChange } from '../lib/account/local.ts';
+
+  const paint = () => {
+    const l = learningMirror();
+    for (const card of document.querySelectorAll<HTMLElement>('[data-gallery]')) {
+      const id = card.dataset['gallery'] ?? '';
+      const badge = card.querySelector<HTMLElement>('[data-opened-badge]');
+      if (badge) badge.hidden = !l.opened[id];
+      card.querySelector('[data-fav]')?.setAttribute('aria-pressed', String(!!l.favorites[id]?.on));
+    }
+  };
+  document.addEventListener('click', (event) => {
+    const target = event.target as Element;
+    const star = target.closest<HTMLElement>('[data-fav]');
+    if (star) {
+      const id = star.dataset['fav'] ?? '';
+      void setFavorite(id, star.getAttribute('aria-pressed') !== 'true').then(paint);
+      return;
+    }
+    const link = target.closest<HTMLAnchorElement>('a[href*="playground/#preset="]');
+    const card = link?.closest<HTMLElement>('[data-gallery]');
+    if (card) void markOpened(card.dataset['gallery'] ?? '');
+  });
+  onLocalChange(paint);
+  paint();
+</script>

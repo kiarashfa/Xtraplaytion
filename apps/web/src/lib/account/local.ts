@@ -135,7 +135,11 @@ export function ago(iso: string | null, now = Date.now(), locale = 'en'): string
 /** Calls `fn` whenever the profile, the save or the cloud state changes, here or in another tab. */
 export function onLocalChange(fn: () => void): () => void {
   const onStorage = (event: StorageEvent) => {
-    if (event.key === null || [PROFILE_KEY, CHANGED_KEY, CLOUD_KEY].includes(event.key)) fn();
+    if (
+      event.key === null ||
+      [PROFILE_KEY, CHANGED_KEY, CLOUD_KEY, 'xp-learning'].includes(event.key)
+    )
+      fn();
   };
   addEventListener(CHANGED_EVENT, fn);
   addEventListener(CLOUD_EVENT, fn);

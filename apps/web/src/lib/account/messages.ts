@@ -18,6 +18,7 @@ export function describeMerge(t: Translate, s: MergeSummary, locale = 'en'): str
     s.updated ? t('user.merge.updated', { count: s.updated }) : '',
     s.removed ? t('user.merge.removed', { count: s.removed }) : '',
     s.profile ? t('user.merge.profile') : '',
+    s.learning ? t('user.merge.learning') : '',
   ].filter(Boolean);
   return new Intl.ListFormat(locale, { type: 'conjunction' }).format(parts);
 }

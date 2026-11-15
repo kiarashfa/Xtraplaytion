@@ -10,6 +10,16 @@ import { ENTRIES, META, pruneRemoved, req, RESULTS, tx } from '../db.ts';
 import type { LibraryEntry } from '../library.ts';
 import { validateState } from '../share.ts';
 import {
+  emptyLearning,
+  LEARNING_KEY,
+  learningKey,
+  learningMirror,
+  mergeLearning,
+  mirrorLearning,
+  validLearning,
+  type Learning,
+} from './learning.ts';
+import {
   CHANGED_EVENT,
   CHANGED_KEY,
   initialsOf,
@@ -67,6 +77,8 @@ export interface SaveFile {
   entries: SavedEntry[];
   /** Entry id -> when it was deleted. */
   removed: Record<string, string>;
+  /** Lessons learned, guesses, challenge rounds, gallery favorites (absent in older saves). */
+  learning?: Learning;
 }
 
 export type SaveError = 'tooBig' | 'notJson' | 'notSave' | 'experiment' | 'newer' | 'invalid';
@@ -190,6 +202,7 @@ export function parseSave(text: string): { save: SaveFile; skipped: number } | S
       profile: validProfile(f['profile']),
       entries,
       removed: pruneRemoved(f['removed'], Date.now()),
+      learning: validLearning(f['learning']),
     },
     skipped,
   };
@@ -205,14 +218,21 @@ export interface MergePlan {
   removed: Record<string, string>;
   /** The incoming profile when it is newer, else null (keep the local one). */
   profile: Profile | null;
+  /** The joined learning record when it differs from the local one, else null. */
+  learning: Learning | null;
   added: number;
   updated: number;
 }
 
 /** What opening `incoming` changes here. Pure, so it is unit tested. */
 export function planMerge(
-  local: { entries: Map<string, string>; removed: Record<string, string>; profile: Profile | null },
-  incoming: Pick<SaveFile, 'entries' | 'removed' | 'profile'>,
+  local: {
+    entries: Map<string, string>;
+    removed: Record<string, string>;
+    profile: Profile | null;
+    learning?: Learning;
+  },
+  incoming: Pick<SaveFile, 'entries' | 'removed' | 'profile' | 'learning'>,
   now = Date.now(),
 ): MergePlan {
   const removed = { ...local.removed };
@@ -224,6 +244,7 @@ export function planMerge(
     remove: [],
     removed: pruneRemoved(removed, now),
     profile: null,
+    learning: null,
     added: 0,
     updated: 0,
   };
@@ -241,6 +262,9 @@ export function planMerge(
   if (incoming.profile && time(incoming.profile.updatedAt) > time(local.profile?.updatedAt)) {
     plan.profile = incoming.profile;
   }
+  const mine = local.learning ?? emptyLearning();
+  const joined = mergeLearning(mine, incoming.learning ?? emptyLearning());
+  if (learningKey(joined) !== learningKey(mine)) plan.learning = joined;
   return plan;
 }
 
@@ -320,6 +344,7 @@ export async function exportSave(): Promise<{ text: string; count: number }> {
       profile: validProfile(await req(meta.get('profile'))),
       entries: out.sort((a, b) => a.created.localeCompare(b.created)),
       removed: pruneRemoved(await req(meta.get('removed')), Date.now()),
+      learning: mergeLearning(validLearning(await req(meta.get('learning'))), learningMirror()),
     };
     return file;
   });
@@ -339,14 +364,17 @@ export interface MergeSummary {
   updated: number;
   removed: number;
   profile: boolean;
+  learning: boolean;
 }
 
-export const nothingNew = (s: MergeSummary) => !s.added && !s.updated && !s.removed && !s.profile;
+export const nothingNew = (s: MergeSummary) =>
+  !s.added && !s.updated && !s.removed && !s.profile && !s.learning;
 
 /** Merges a save file into this browser in one transaction. */
 export async function importSave(save: SaveFile): Promise<MergeSummary> {
   let plan: MergePlan | null = null;
   let profile: Profile | null = null;
+  let learning: Learning | null = null;
   await tx([ENTRIES, RESULTS, META], 'readwrite', async (t) => {
     const entries = t.objectStore(ENTRIES);
     const results = t.objectStore(RESULTS);
@@ -358,6 +386,7 @@ export async function importSave(save: SaveFile): Promise<MergeSummary> {
         entries: new Map(all.map((e) => [e.id, e.updated])),
         removed: pruneRemoved(await req(meta.get('removed')), Date.now()),
         profile: localProfile,
+        learning: mergeLearning(validLearning(await req(meta.get('learning'))), learningMirror()),
       },
       save,
     );
@@ -384,6 +413,10 @@ export async function importSave(save: SaveFile): Promise<MergeSummary> {
     }
     meta.put(p.removed, 'removed');
     if (p.profile) meta.put(p.profile, 'profile');
+    if (p.learning) {
+      meta.put(p.learning, 'learning');
+      learning = p.learning;
+    }
     profile = p.profile ?? localProfile;
     plan = p;
   });
@@ -393,8 +426,10 @@ export async function importSave(save: SaveFile): Promise<MergeSummary> {
     updated: p?.updated ?? 0,
     removed: p?.remove.length ?? 0,
     profile: !!p?.profile,
+    learning: !!p?.learning,
   };
   mirror(profile);
+  if (learning) mirrorLearning(learning);
   if (!nothingNew(summary)) markChanged();
   return summary;
 }
@@ -408,5 +443,6 @@ export async function clearBrowser(): Promise<void> {
   });
   writeJson(PROFILE_KEY, null);
   writeJson(CHANGED_KEY, null);
+  writeJson(LEARNING_KEY, null);
   dispatchEvent(new CustomEvent(CHANGED_EVENT));
 }

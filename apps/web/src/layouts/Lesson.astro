@@ -1,5 +1,5 @@
 ---
-import { useTranslations } from '../i18n';
+import { localeInfo, useTranslations, type MessageKey } from '../i18n';
 import { LESSONS } from '../lib/lessons.ts';
 import { url } from '../lib/url.ts';
 import Base from './Base.astro';
@@ -13,6 +13,16 @@ const { frontmatter: fm } = Astro.props;
 const at = LESSONS.findIndex((l) => l.n === fm.n);
 const prev = at > 0 ? LESSONS[at - 1] : null;
 const next = at >= 0 && at + 1 < LESSONS.length ? LESSONS[at + 1] : null;
+const slug = LESSONS[at]?.slug ?? '';
+// Message templates the progress script formats in the browser.
+const keys = [
+  'learn.pending',
+  'learn.racesDone',
+  'learn.learnedOn',
+  'learn.unmarked',
+] as const satisfies readonly MessageKey[];
+const { catalog } = localeInfo();
+const templates = Object.fromEntries(keys.map((k) => [k, catalog[k]]));
 ---
 
 <Base
@@ -35,6 +45,48 @@ const next = at >= 0 && at + 1 < LESSONS.length ? LESSONS[at + 1] : null;
     </p>
     <h1>{fm.title}</h1>
     <slot />
+    {/* Lesson progress: marked learned once every race here has finished and the reader reached
+        this box; undo with "Mark as not learned". Kept in the save file. */}
+    <section
+      class="not-prose xp-card mt-12 flex flex-wrap items-center gap-3 p-4 sm:p-5"
+      aria-label={t('learn.label')}
+      data-lesson-progress={slug}
+      data-total={LESSONS.length}
+      data-strings={JSON.stringify(templates)}
+    >
+      <span
+        class="grid size-10 flex-none place-items-center rounded-full border border-line-strong text-faint data-[learned]:border-good data-[learned]:bg-good data-[learned]:text-surface"
+        aria-hidden="true"
+        data-progress-icon
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="m5 12 4.5 4.5L19 7" />
+        </svg>
+      </span>
+      <p class="min-w-0 flex-1 text-[15px]" role="status" data-progress-text>
+        {t('learn.pendingStatic')}
+      </p>
+      <button type="button" class="xp-btn min-h-11" data-progress-mark>
+        {t('learn.mark')}
+      </button>
+      <button
+        type="button"
+        class="min-h-11 text-sm font-medium text-muted underline underline-offset-2 hover:text-ink [&[hidden]]:hidden"
+        data-progress-unmark
+        hidden
+      >
+        {t('learn.unmark')}
+      </button>
+    </section>
     <nav class="not-prose mt-12 grid gap-3 sm:grid-cols-2" aria-label={t('lessons.more')}>
       {prev && (
         <a
@@ -57,3 +109,116 @@ const next = at >= 0 && at + 1 < LESSONS.length ? LESSONS[at + 1] : null;
     </nav>
   </article>
 </Base>
+
+<script>
+  import { createFormatter } from '../i18n/format.ts';
+  import {
+    isLearned,
+    learningMirror,
+    RACE_DONE_EVENT,
+    setLearned,
+  } from '../lib/account/learning.ts';
+  import { onLocalChange } from '../lib/account/local.ts';
+
+  const box = document.querySelector<HTMLElement>('[data-lesson-progress]');
+  const slug = box?.dataset['lessonProgress'];
+  if (box && slug) {
+    const strings = JSON.parse(box.dataset['strings'] ?? '{}') as Record<string, string>;
+    const total = Number(box.dataset['total']) || 0;
+    const formatter = createFormatter(document.documentElement.lang || 'en');
+    const t = (key: string, params?: Record<string, string | number>) =>
+      formatter.format(strings[key] ?? key, params);
+    const date = new Intl.DateTimeFormat(document.documentElement.lang || 'en', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    const $ = <T extends Element = HTMLElement>(selector: string): T => {
+      const el = box.querySelector<T>(selector);
+      if (!el) throw new Error(`missing ${selector}`);
+      return el;
+    };
+    const text = $('[data-progress-text]');
+    const icon = $('[data-progress-icon]');
+    const mark = $<HTMLButtonElement>('[data-progress-mark]');
+    const unmark = $<HTMLButtonElement>('[data-progress-unmark]');
+    const finished = new Set<string>();
+    let seenEnd = false;
+    // After "Mark as not learned", this visit does not mark the lesson again by itself.
+    let held = false;
+
+    const raceKeys = () =>
+      [...document.querySelectorAll<HTMLElement>('article [data-race-key]')].map(
+        (el) => el.dataset['raceKey'] ?? '',
+      );
+
+    const paint = () => {
+      const l = learningMirror();
+      const mine = l.lessons[slug];
+      const learned = !!mine?.learned;
+      const count = Object.values(l.lessons).filter((m) => m.learned).length;
+      icon.toggleAttribute('data-learned', learned);
+      mark.hidden = learned;
+      unmark.hidden = !learned;
+      if (learned && mine?.learned) {
+        text.textContent = t('learn.learnedOn', {
+          date: date.format(new Date(mine.learned)),
+          count,
+          total,
+        });
+      } else if (held || (mine && !mine.learned)) {
+        text.textContent = t('learn.unmarked');
+      } else {
+        const keys = raceKeys();
+        const done = keys.filter((k) => finished.has(k)).length;
+        text.textContent = keys.length
+          ? `${t('learn.pending')} ${t('learn.racesDone', { done, total: keys.length })}`
+          : t('learn.pending');
+      }
+    };
+
+    const check = () => {
+      paint();
+      if (held || !seenEnd || isLearned(learningMirror(), slug)) return;
+      const keys = raceKeys();
+      if (keys.length && keys.every((k) => finished.has(k)))
+        void setLearned(slug, true).then(paint);
+    };
+
+    addEventListener(RACE_DONE_EVENT, (e) => {
+      const key = (e as CustomEvent<{ key?: string }>).detail?.key;
+      if (key) finished.add(key);
+      check();
+    });
+    new IntersectionObserver((list) => {
+      if (list.some((x) => x.isIntersecting)) {
+        seenEnd = true;
+        check();
+      }
+    }).observe(box);
+    mark.addEventListener('click', () => {
+      held = false;
+      void setLearned(slug, true).then(paint);
+    });
+    unmark.addEventListener('click', () => {
+      held = true;
+      void setLearned(slug, false).then(() => {
+        paint();
+        mark.focus();
+      });
+    });
+    onLocalChange(paint);
+    // The races are islands that appear after this script runs: count them when they do.
+    const article = box.closest('article');
+    let seen = -1;
+    if (article)
+      new MutationObserver(() => {
+        const n = raceKeys().length;
+        if (n !== seen) {
+          seen = n;
+          paint();
+        }
+      }).observe(article, { childList: true, subtree: true });
+    paint();
+  }
+</script>

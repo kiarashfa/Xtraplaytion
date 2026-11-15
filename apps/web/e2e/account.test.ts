@@ -152,7 +152,12 @@ describe.each(targets)('$name', (target) => {
           code: 'test-code',
           state: q.get('state') ?? '',
         }).toString();
-        return route.fulfill({ status: 302, headers: { location: back.href } });
+        // A page that sends the visitor back (WebKit cannot fulfill a request with a redirect).
+        return route.fulfill({
+          status: 200,
+          contentType: 'text/html',
+          body: `<!doctype html><meta http-equiv="refresh" content="0;url=${back.href.replace(/&/g, '&amp;')}">`,
+        });
       });
       await p.route('https://api.dropboxapi.com/**', (route) => {
         const path = new URL(route.request().url()).pathname;

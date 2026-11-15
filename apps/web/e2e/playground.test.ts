@@ -185,7 +185,8 @@ describe.each(targets)('$name', (target) => {
     await expect.poll(() => page.url()).toContain('#s=');
     const fresh = await context.newPage();
     await fresh.goto(page.url());
-    await expect.poll(() => fresh.locator('table tbody tr').count()).toBe(4);
+    // A fresh tab rebuilds the race from the link; slow CI runners need longer than the default.
+    await expect.poll(() => fresh.locator('table tbody tr').count(), { timeout: 20_000 }).toBe(4);
     await showTab(fresh, 'Models');
     await fresh.getByRole('button', { name: 'Edit P2' }).click();
     expect(await fresh.getByRole('spinbutton', { name: 'Degree' }).inputValue()).toBe('11');

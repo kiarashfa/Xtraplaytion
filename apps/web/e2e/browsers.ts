@@ -81,7 +81,13 @@ export async function openPage(
   const problems: string[] = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() === 'error') problems.push(`console: ${m.text()}`);
+    if (m.type() !== 'error') return;
+    const text = m.text();
+    // Firefox logs a load that a navigation cancelled (NS_BINDING_ABORTED, 0x804B0002), such as
+    // a font still downloading when a test moves on, as an error. It comes from leaving the page,
+    // not from the page; Chrome and WebKit stay silent about the same thing.
+    if (text.includes('status=2152398850')) return;
+    problems.push(`console: ${text}`);
   });
   await page.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', (e) => {
